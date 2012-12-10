@@ -1097,6 +1097,7 @@ enum tileFlags {
 #define REST_KEY			'z'
 #define AUTO_REST_KEY		'Z'
 #define SEARCH_KEY			's'
+#define MENU_KEY			'q'
 #define INVENTORY_KEY		'i'
 #define ACKNOWLEDGE_KEY		' '
 #define EQUIP_KEY			'e'

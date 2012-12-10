@@ -2433,6 +2433,9 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			search(rogue.awarenessBonus < 0 ? 40 : 80);
 			playerTurnEnded();
 			break;
+		case MENU_KEY:
+			actionMenu(0, 0, rogue.playbackMode);
+			break;
 		case INVENTORY_KEY:
 			displayInventory(ALL_ITEMS, 0, 0, true, true);
 			break;
