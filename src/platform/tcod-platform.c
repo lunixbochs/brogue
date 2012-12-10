@@ -148,6 +148,8 @@ static boolean processSpecialKeystrokes(TCOD_key_t k, boolean text) {
 		isFullScreen = !isFullScreen;
 		TCOD_console_set_fullscreen(isFullScreen);
 		return true;
+	}
+/*
 	} else if ((k.vk == TCODK_PAGEUP
 				|| ((!text) && k.vk == TCODK_CHAR && (k.c == '=' || k.c == '+')))
 			   && brogueFontSize < 13) {
@@ -180,6 +182,7 @@ static boolean processSpecialKeystrokes(TCOD_key_t k, boolean text) {
 		TCOD_console_flush();
 		return true;
 	}
+*/
 	return false;
 }
 
