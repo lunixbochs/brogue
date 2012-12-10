@@ -1,10 +1,10 @@
 
 LIBTCODDIR=src/libtcod-1.5.1
-CFLAGS=-Isrc/brogue -Isrc/platform -Wall -Wno-parentheses ${DEFINES}
+CFLAGS=-Ilibtcod/include -Isrc/brogue -Isrc/platform -Wall -Wno-parentheses ${DEFINES}
 RELEASENAME=brogue-1.7
 
 %.o : %.c
-	gcc $(CFLAGS) -g -o $@ -c $< 
+	$(CC) $(CFLAGS) -g -o $@ -c $< 
 
 BROGUEFILES=src/brogue/Architect.o \
 	src/brogue/Combat.o \
@@ -28,7 +28,7 @@ BROGUEFILES=src/brogue/Architect.o \
 
 TCOD_DEF = -DBROGUE_TCOD -I$(LIBTCODDIR)/include
 TCOD_DEP = ${LIBTCODDIR}
-TCOD_LIB = -L. -L${LIBTCODDIR} -ltcod
+TCOD_LIB = -L. -L${LIBTCODDIR} -Llibtcod/ -Wl,-Bdynamic -ltcod
 
 CURSES_DEF = -DBROGUE_CURSES
 CURSES_LIB = -lncurses -lm
@@ -56,7 +56,7 @@ curses : bin/brogue
 
 
 bin/brogue : ${DEPENDENCIES} ${BROGUEFILES}
-	gcc -O3 -o bin/brogue ${BROGUEFILES} ${LIBRARIES} -Wl,-rpath,.
+	$(CC) -O3 -o bin/brogue ${BROGUEFILES} ${LIBRARIES} -Wl,-rpath,.
 
 clean : 
 	rm -f src/brogue/*.o src/platform/*.o bin/brogue
