@@ -2073,6 +2073,9 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			playerTurnEnded();
 			refreshSideBar(-1, -1, false);
 			break;
+		case MENU_KEY:
+			actionMenu(0, 0, rogue.playbackMode);
+			break;
 		case INVENTORY_KEY:
 			displayInventory(ALL_ITEMS, 0, 0, true, true);
 			break;
