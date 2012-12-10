@@ -53,7 +53,6 @@ static void gameLoop()
 	TCOD_console_init_root(COLS, ROWS, "Brogue", false, renderer);
 	TCOD_console_map_ascii_codes_to_font(0, 255, 0, 0);
 	TCOD_console_set_keyboard_repeat(175, 30);
-	TCOD_mouse_show_cursor(1);
 	
 	rogueMain();
 
