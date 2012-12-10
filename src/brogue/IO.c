@@ -412,68 +412,70 @@ void initializeMenuButtons(buttonState *state, brogueButton buttons[5]) {
 	buttonCount = 0;
 	
 	if (rogue.playbackMode) {
-        if (KEYBOARD_LABELS) {
-            sprintf(buttons[buttonCount].text,  " Unpause (%sspace%s) ", goldTextEscape, whiteTextEscape);
-        } else {
-            strcpy(buttons[buttonCount].text,   "     Unpause     ");
-        }
+		if (KEYBOARD_LABELS) {
+			sprintf(buttons[buttonCount].text,	" Play (%sspace%s) ", goldTextEscape, whiteTextEscape);
+		} else {
+			strcpy(buttons[buttonCount].text,   " Unpause ");
+		}
 		buttons[buttonCount].hotkey[0] = ACKNOWLEDGE_KEY;
 		buttonCount++;
 		
-        if (KEYBOARD_LABELS) {
-            sprintf(buttons[buttonCount].text,  "Omniscience (%stab%s)", goldTextEscape, whiteTextEscape);
-        } else {
-            strcpy(buttons[buttonCount].text,	"   Omniscience   ");
-        }
+		if (KEYBOARD_LABELS) {
+			sprintf(buttons[buttonCount].text,	" Omni (%stab%s) ", goldTextEscape, whiteTextEscape);
+		} else {
+			strcpy(buttons[buttonCount].text, " Omni ");
+		}
 		buttons[buttonCount].hotkey[0] = TAB_KEY;
 		buttonCount++;
 		
-        if (KEYBOARD_LABELS) {
-            sprintf(buttons[buttonCount].text,	" Next Turn (%sl%s) ", goldTextEscape, whiteTextEscape);
-        } else {
-            strcpy(buttons[buttonCount].text,	"   Next Turn   ");
-        }
+		if (KEYBOARD_LABELS) {
+			sprintf(buttons[buttonCount].text,	" Next (%sl%s) ", goldTextEscape, whiteTextEscape);
+		} else {
+			strcpy(buttons[buttonCount].text, " Next ");
+		}
 		buttons[buttonCount].hotkey[0] = RIGHT_KEY;
 		buttons[buttonCount].hotkey[1] = RIGHT_ARROW;
 		buttons[buttonCount].hotkey[2] = NUMPAD_6;
 		buttonCount++;
 		
-		strcpy(buttons[buttonCount].text,		"  Menu  ");
+		sprintf(buttons[buttonCount].text,		" Menu (%sq%s) ", goldTextEscape, whiteTextEscape);
+		buttons[buttonCount].hotkey[0] = MENU_KEY;
 		buttonCount++;
 	} else {
-		sprintf(buttons[buttonCount].text,	"   E%sx%splore   ", goldTextEscape, whiteTextEscape);
+		sprintf(buttons[buttonCount].text,	" E%sx%splore ", goldTextEscape, whiteTextEscape);
 		buttons[buttonCount].hotkey[0] = EXPLORE_KEY;
 		buttons[buttonCount].hotkey[1] = 'X';
 		buttonCount++;
-		
-        if (KEYBOARD_LABELS) {
-            sprintf(buttons[buttonCount].text,	"   Rest (%sz%s)   ", goldTextEscape, whiteTextEscape);
-        } else {
-            strcpy(buttons[buttonCount].text,	"     Rest     ");
-        }
+
+		if (KEYBOARD_LABELS) {
+			sprintf(buttons[buttonCount].text,	" Rest (%sz%s) ", goldTextEscape, whiteTextEscape);
+		} else {
+			strcpy(buttons[buttonCount].text, " Rest ");
+		}
 		buttons[buttonCount].hotkey[0] = REST_KEY;
 		buttonCount++;
 		
-        if (KEYBOARD_LABELS) {
-            sprintf(buttons[buttonCount].text,	"  Search (%ss%s)  ", goldTextEscape, whiteTextEscape);
-        } else {
-            strcpy(buttons[buttonCount].text,	"    Search    ");
-        }
+		if (KEYBOARD_LABELS) {
+			sprintf(buttons[buttonCount].text,	" Search (%ss%s) ", goldTextEscape, whiteTextEscape);
+		} else {
+			strcpy(buttons[buttonCount].text, " Search ");
+		}
 		buttons[buttonCount].hotkey[0] = SEARCH_KEY;
 		buttonCount++;
-		
-		strcpy(buttons[buttonCount].text,		"    Menu    ");
+
+		sprintf(buttons[buttonCount].text,		" Menu (%sq%s) ", goldTextEscape, whiteTextEscape);
+		buttons[buttonCount].hotkey[0] = MENU_KEY;
 		buttonCount++;
 	}
 	
-	sprintf(buttons[4].text,	"   %sI%snventory   ", goldTextEscape, whiteTextEscape);
+	sprintf(buttons[4].text,	" %sI%snventory ", goldTextEscape, whiteTextEscape);
 	buttons[4].hotkey[0] = INVENTORY_KEY;
 	buttons[4].hotkey[1] = 'I';
 	
 	x = mapToWindowX(0);
 	for (i=0; i<5; i++) {
 		buttons[i].x = x;
-		x += strLenWithoutEscapes(buttons[i].text) + 2; // Gap between buttons.
+		x += strLenWithoutEscapes(buttons[i].text) + 1; // Gap between buttons.
 	}
 	
 	initializeButtonState(state,
