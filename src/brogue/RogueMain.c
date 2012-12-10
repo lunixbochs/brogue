@@ -130,7 +130,7 @@ void welcome() {
     encodeMessageColor(buf, strlen(buf), &itemMessageColor);
     strcat(buf, "Amulet of Yendor");
     encodeMessageColor(buf, strlen(buf), &white);
-    strcat(buf, " from the 26th floor and escape with it!");
+    strcat(buf, " from the 26th floor and escape!");
 	message(buf, false);
 	messageWithColor("Press <?> for help at any time.", &backgroundMessageColor, false);
 	flavorMessage("The doors to the dungeon slam shut behind you.");
