@@ -2122,7 +2122,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			break;
 		case EXPLORE_KEY:
 			considerCautiousMode();
-			explore(controlKey ? 1 : 30);
+			explore(controlKey ? 1 : 25);
 			break;
 		case AUTOPLAY_KEY:
 			autoPlayLevel(controlKey);
