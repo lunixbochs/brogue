@@ -164,7 +164,7 @@ static int curses_init( ) {
 
 static int term_start() {
 	char *term = getenv("TERM");
-	is_xterm = (strncmp(term, "xterm", 5) == 0) || (strncmp(term, "gnome", 5) == 0);
+	is_xterm = (strncmp(term, "xterm", 5) == 0) || (strncmp(term, "gnome", 5) == 0) || (strncmp(term, "st", 2) == 0);
 
 	term_title_push();
 	term_show_scrollbar(0);
@@ -511,6 +511,19 @@ static void buffer_plot(int ch, int x, int y, fcolor *fg, fcolor *bg) {
 
 	coerce_colorcube(fg, &cube_fg);
 	coerce_colorcube(bg, &cube_bg);
+	if (cube_fg.idx == cube_bg.idx) {
+		// verify that the colors are really the same; otherwise, we'd better force the output apart
+		int naive_distance =
+			(fg->r - bg->r) * (fg->r - bg->r)
+			+ (fg->g - bg->g) * (fg->g - bg->g)
+			+ (fg->b - bg->b) * (fg->b - bg->b);
+		if (naive_distance > 3) {
+			// very arbitrary cutoff, and an arbitrary fix, very lazy
+			if (cube_bg.r > 0) {cube_bg.r -= 1; cube_bg.idx -= 1; } 
+			if (cube_bg.g > 0) {cube_bg.g -= 1; cube_bg.idx -= 6; } 
+			if (cube_bg.b > 0) {cube_bg.b -= 1; cube_bg.idx -= 36; } 
+		}
+	}
 
 	int cell = x + y * minsize.width;
 	cell_buffer[cell].ch = ch;
@@ -534,6 +547,7 @@ static void buffer_render_256() {
 		// idx = cell_buffer[roll].shuffle;
 		
 		// cell_buffer[roll].shuffle = cell_buffer[i].shuffle;
+
 		idx = i;
 
 		int pair = coerce_prs(&cell_buffer[idx].fore, &cell_buffer[idx].back);
@@ -714,6 +728,147 @@ static void term_wait(int ms) {
 	napms(ms);
 }
 
+
+struct {
+	char *name;
+	int ch;
+} curses_keys[] = {
+	{"NONE", TERM_NONE},
+
+	{"TAB", '\t'},
+	{"ENTER", '\n'},
+	{"RETURN", '\n'},
+	{"SPACE", ' '},
+
+	{"ESC", 27},
+	{"ESCAPE", 27},
+
+	{"BREAK", KEY_BREAK},
+	{"SRESET", KEY_SRESET},
+	{"RESET", KEY_RESET},
+	{"DOWN", KEY_DOWN},
+	{"UP", KEY_UP	},
+	{"LEFT", KEY_LEFT},
+	{"RIGHT", KEY_RIGHT},
+	{"HOME", KEY_HOME},
+	{"BACKSPACE", KEY_BACKSPACE},
+	{"F1", KEY_F(1)},
+	{"F2", KEY_F(2)},
+	{"F3", KEY_F(3)},
+	{"F4", KEY_F(4)},
+	{"F5", KEY_F(5)},
+	{"F6", KEY_F(6)},
+	{"F7", KEY_F(7)},
+	{"F8", KEY_F(8)},
+	{"F9", KEY_F(9)},
+	{"F10", KEY_F(10)},
+	{"F11", KEY_F(11)},
+	{"F12", KEY_F(12)},
+	{"DL", KEY_DL},
+	{"IL", KEY_IL},
+	{"DC", KEY_DC},
+	{"DEL", KEY_DC},
+	{"DELETE", KEY_DC},
+	{"IC", KEY_IC},
+	{"EIC", KEY_EIC},
+	{"CLEAR", KEY_CLEAR},
+	{"EOS", KEY_EOS},
+	{"EOL", KEY_EOL},
+	{"SF", KEY_SF},
+	{"SR", KEY_SR},
+
+	{"PGUP", KEY_NPAGE},
+	{"PGDN", KEY_PPAGE},
+	{"PAGEDOWN", KEY_NPAGE},
+	{"PAGEUP", KEY_PPAGE},
+	{"NPAGE", KEY_NPAGE},
+	{"PPAGE", KEY_PPAGE},
+
+	{"STAB", KEY_STAB},
+	{"CTAB", KEY_CTAB},
+	{"CATAB", KEY_CATAB},
+
+	{"PRINT", KEY_PRINT},
+	{"LL", KEY_LL},
+	{"A1", KEY_A1},
+	{"A3", KEY_A3},
+	{"B2", KEY_B2},
+	{"C1", KEY_C1},
+	{"C3", KEY_C3},
+	{"BTAB", KEY_BTAB},
+	{"BEG", KEY_BEG	},
+	{"CANCEL", KEY_CANCEL},
+	{"CLOSE", KEY_CLOSE},
+	{"COMMAND", KEY_COMMAND},
+	{"COPY", KEY_COPY},
+	{"CREATE", KEY_CREATE},
+	{"END", KEY_END	},
+	{"EXIT", KEY_EXIT},
+	{"FIND", KEY_FIND},
+	{"HELP", KEY_HELP},
+	{"MARK", KEY_MARK},
+	{"MESSAGE", KEY_MESSAGE},
+	{"MOVE", KEY_MOVE},
+	{"NEXT", KEY_NEXT},
+	{"OPEN", KEY_OPEN},
+	{"OPTIONS", KEY_OPTIONS},
+	{"PREVIOUS", KEY_PREVIOUS},
+	{"REDO", KEY_REDO},
+	{"REFERENCE", KEY_REFERENCE},
+	{"REFRESH", KEY_REFRESH},
+	{"REPLACE", KEY_REPLACE},
+	{"RESTART", KEY_RESTART},
+	{"RESUME", KEY_RESUME},
+	{"SAVE", KEY_SAVE},
+	{"SBEG", KEY_SBEG},
+	{"SCANCEL", KEY_SCANCEL},
+	{"SCOMMAND", KEY_SCOMMAND},
+	{"SCOPY", KEY_SCOPY},
+	{"SCREATE", KEY_SCREATE},
+	{"SDC", KEY_SDC	},
+	{"SDL", KEY_SDL	},
+	{"SELECT", KEY_SELECT},
+	{"SEND", KEY_SEND},
+	{"SEOL", KEY_SEOL},
+	{"SEXIT", KEY_SEXIT},
+	{"SFIND", KEY_SFIND},
+	{"SHELP", KEY_SHELP},
+	{"SHOME", KEY_SHOME},
+	{"SIC", KEY_SIC	},
+	{"SLEFT", KEY_SLEFT},
+	{"SMESSAGE", KEY_SMESSAGE},
+	{"SMOVE", KEY_SMOVE},
+	{"SNEXT", KEY_SNEXT},
+	{"SOPTIONS", KEY_SOPTIONS},
+	{"SPREVIOUS", KEY_SPREVIOUS},
+	{"SPRINT", KEY_SPRINT},
+	{"SREDO", KEY_SREDO},
+	{"SREPLACE", KEY_SREPLACE},
+	{"SRIGHT", KEY_SRIGHT},
+	{"SRSUME", KEY_SRSUME},
+	{"SSAVE", KEY_SSAVE},
+	{"SSUSPEND", KEY_SSUSPEND},
+	{"SUNDO", KEY_SUNDO},
+	{"SUSPEND", KEY_SUSPEND},
+	{"UNDO", KEY_UNDO},
+	{"MOUSE", KEY_MOUSE},
+	{"RESIZE", KEY_RESIZE},
+	{NULL, 0},
+};
+
+int term_keycodeByName(const char *name) {
+	int i = 0;
+	while (curses_keys[i].name != NULL) {
+		if (strcmp(name, curses_keys[i].name) == 0) {
+			return curses_keys[i].ch;
+		}
+		i++;
+	}
+	
+	return name[0];
+}
+
+
 struct term_t Term = {
 	term_start,
 	term_end,
@@ -724,6 +879,7 @@ struct term_t Term = {
 	term_has_key,
 	term_title,
 	term_resize,
+	term_keycodeByName,
 	{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_BACKSPACE, KEY_DC, KEY_F(12)}
 };
 #endif

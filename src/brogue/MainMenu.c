@@ -7,18 +7,18 @@
  *
  *  This file is part of Brogue.
  *
- *  Brogue is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
  *
- *  Brogue is distributed in the hope that it will be useful,
+ *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with Brogue.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "Rogue.h"
@@ -58,7 +58,7 @@ void drawMenuFlames(signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3
             }
             
 			if (mask[i][j] == 100) {
-				plotCharWithColor(dchar, i, j, darkGray, *maskColor);
+				plotCharWithColor(dchar, i, j, &darkGray, maskColor);
 			} else {
 				tempColor = black;
 				tempColor.red	= flames[i][j][0] / MENU_FLAME_PRECISION_FACTOR;
@@ -67,7 +67,7 @@ void drawMenuFlames(signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3
 				if (mask[i][j] > 0) {
 					applyColorAverage(&tempColor, maskColor, mask[i][j]);
 				}
-				plotCharWithColor(dchar, i, j, darkGray, tempColor);
+				plotCharWithColor(dchar, i, j, &darkGray, &tempColor);
 			}
 		}
 	}
@@ -180,7 +180,7 @@ void initializeMenuFlames(boolean includeTitle,
 						  signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3],
 						  unsigned char mask[COLS][ROWS]) {
 	short i, j, k, colorSourceCount;
-	const char title[MENU_TITLE_HEIGHT][MENU_TITLE_WIDTH] = {
+	const char title[MENU_TITLE_HEIGHT][MENU_TITLE_WIDTH+1] = {
 		"########   ########       ######         #######   ####     ###  #########",
 		" ##   ###   ##   ###    ##     ###     ##      ##   ##       #    ##     #",
 		" ##    ##   ##    ##   ##       ###   ##        #   ##       #    ##     #",
@@ -201,8 +201,6 @@ void initializeMenuFlames(boolean includeTitle,
 		"                            ##                                            ",
 		"                           ####                                           ",
 	};
-	
-	rogue.gameHasEnded = false;
 	
 	for (i=0; i<COLS; i++) {
 		for (j=0; j<ROWS; j++) {
@@ -568,6 +566,57 @@ boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
 	}
 }
 
+void scum(unsigned long startingSeed, short numberOfSeedsToScan, short scanThroughDepth) {
+    unsigned long theSeed;
+    char path[BROGUE_FILENAME_MAX];
+    item *theItem, spareItem;
+    char buf[200];
+    FILE *logFile;
+    
+    logFile = fopen("Brogue seed scumming log file.txt", "w");
+    rogue.nextGame = NG_NOTHING;
+    
+    getAvailableFilePath(path, LAST_GAME_NAME, GAME_SUFFIX);
+    strcat(path, GAME_SUFFIX);
+    
+    fprintf(logFile, "Brogue seed catalog, seeds %li to %li, through depth %i.\n\n\
+To play one of these seeds, press control-N from the title screen \
+and enter the seed number. Knowing which items will appear on \
+the first %i depths will, of course, make the game significantly easier.",
+            startingSeed, startingSeed + numberOfSeedsToScan - 1, scanThroughDepth, scanThroughDepth);
+    
+    for (theSeed = startingSeed; theSeed < startingSeed + numberOfSeedsToScan; theSeed++) {
+        fprintf(logFile, "\n\nSeed %li:", theSeed);
+        printf("\nScanned seed %li.", theSeed);
+        rogue.nextGamePath[0] = '\0';
+        randomNumbersGenerated = 0;
+        
+        rogue.playbackMode = false;
+        rogue.playbackFastForward = false;
+        rogue.playbackBetweenTurns = false;
+        
+        strcpy(currentFilePath, path);
+        initializeRogue(theSeed);
+        for (rogue.depthLevel = 1; rogue.depthLevel <= scanThroughDepth; rogue.depthLevel++) {
+            startLevel(rogue.depthLevel == 1 ? 1 : rogue.depthLevel - 1, 1); // descending into level n
+            fprintf(logFile, "\n    Depth %i:", rogue.depthLevel);
+            for (theItem = floorItems->nextItem; theItem != NULL; theItem = theItem->nextItem) {
+                spareItem = *theItem;
+                identify(&spareItem);
+                itemName(&spareItem, buf, true, true, NULL);
+                upperCase(buf);
+                fprintf(logFile, "\n        %s", buf);
+                if (pmap[theItem->xLoc][theItem->yLoc].machineNumber > 0) {
+                    fprintf(logFile, " (vault %i)", pmap[theItem->xLoc][theItem->yLoc].machineNumber);
+                }
+            }
+        }
+        freeEverything();
+        remove(currentFilePath); // Don't add a spurious LastGame file to the brogue folder.
+    }
+    fclose(logFile);
+}
+
 // This is the basic program loop.
 // When the program launches, or when a game ends, you end up here.
 // If the player has already said what he wants to do next
@@ -594,13 +643,16 @@ void mainBrogueJunction() {
 				displayBuffer[i][j].foreColorComponents[k] = 0;
 				displayBuffer[i][j].backColorComponents[k] = 0;
 			}
-			plotCharWithColor(' ', i, j, black, black);
+			plotCharWithColor(' ', i, j, &black, &black);
 		}
 	}
 	
 	initializeLaunchArguments(&rogue.nextGame, rogue.nextGamePath, &rogue.nextGameSeed);
 	
 	do {
+        rogue.gameHasEnded = false;
+        rogue.playbackFastForward = false;
+        rogue.playbackMode = false;
 		switch (rogue.nextGame) {
 			case NG_NOTHING:
 				// Run the main menu to get a decision out of the player.
@@ -733,6 +785,10 @@ void mainBrogueJunction() {
 				rogue.nextGame = NG_NOTHING;
 				printHighScores(false);
 				break;
+            case NG_SCUM:
+                rogue.nextGame = NG_NOTHING;
+                scum(1, 1000, 5);
+                break;
 			case NG_QUIT:
 				// No need to do anything.
 				break;
