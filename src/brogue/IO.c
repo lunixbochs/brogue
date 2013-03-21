@@ -7,18 +7,18 @@
  *  
  *  This file is part of Brogue.
  *
- *  Brogue is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
  *
- *  Brogue is distributed in the hope that it will be useful,
+ *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with Brogue.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <math.h>
@@ -37,7 +37,7 @@ short getPathOnMap(short path[1000][2], short **map, short originX, short origin
 	dir = 0;
 	
 	for (steps = 0; dir != -1;) {
-		dir = nextStep(map, x, y, false);
+		dir = nextStep(map, x, y, NULL, false);
 		if (dir != -1) {
 			x += nbDirs[dir][0];
 			y += nbDirs[dir][1];
@@ -349,7 +349,7 @@ void mainInputLoop() {
 	item *theItem;
 	cellDisplayBuffer rbuf[COLS][ROWS];
 	
-	boolean canceled, targetConfirmed, tabKey, focusedOnMonster, focusedOnItem,
+	boolean canceled, targetConfirmed, tabKey, focusedOnMonster, focusedOnItem, focusedOnTerrain,
 	playingBack, doEvent, textDisplayed, cursorMode, justDisabledCursorMode;
 	
 	rogueEvent theEvent;
@@ -372,7 +372,7 @@ void mainInputLoop() {
 	
 	playingBack = rogue.playbackMode;
 	rogue.playbackMode = false;
-	costMap = allocDynamicGrid();
+	costMap = allocGrid();
 	
 	cursor[0] = cursor[1] = -1;
 	
@@ -381,7 +381,7 @@ void mainInputLoop() {
 		oldRNG = rogue.RNG;
 		rogue.RNG = RNG_COSMETIC;
 		
-		focusedOnMonster = focusedOnItem = false;
+		focusedOnMonster = focusedOnItem = focusedOnTerrain = false;
 		steps = 0;
 		clearCursorPath();
 		
@@ -412,7 +412,7 @@ void mainInputLoop() {
 		populateCreatureCostMap(costMap, &player);
 		costMap[rogue.downLoc[0]][rogue.downLoc[1]] = 100;
 		costMap[rogue.upLoc[0]][rogue.upLoc[1]] = 100;
-		fillDynamicGrid(playerPathingMap, 30000);
+		fillGrid(playerPathingMap, 30000);
 		playerPathingMap[player.xLoc][player.yLoc] = 0;
 		dijkstraScan(playerPathingMap, costMap, true);
         
@@ -466,13 +466,13 @@ void mainInputLoop() {
 				
 				monst = monsterAtLoc(cursor[0], cursor[1]);
 				theItem = itemAtLoc(cursor[0], cursor[1]);
-				if (monst != NULL && monst != &player && (canSeeMonster(monst) || rogue.playbackOmniscience)) {
+				if (monst != NULL && (canSeeMonster(monst) || rogue.playbackOmniscience)) {
 					rogue.playbackMode = playingBack;
 					refreshSideBar(cursor[0], cursor[1], false);
 					rogue.playbackMode = false;
 					
 					focusedOnMonster = true;
-					if (!player.status[STATUS_HALLUCINATING] || playingBack) {
+					if (monst != &player && (!player.status[STATUS_HALLUCINATING] || rogue.playbackOmniscience)) {
 						printMonsterDetails(monst, rbuf);
 						textDisplayed = true;
 					}
@@ -482,10 +482,15 @@ void mainInputLoop() {
 					rogue.playbackMode = false;
 					
 					focusedOnItem = true;
-					if (!player.status[STATUS_HALLUCINATING] || playingBack) {
+					if (!player.status[STATUS_HALLUCINATING] || rogue.playbackOmniscience) {
 						printFloorItemDetails(theItem, rbuf);
 						textDisplayed = true;
 					}
+				} else if (cellHasTMFlag(cursor[0], cursor[1], TM_LIST_IN_SIDEBAR) && playerCanSeeOrSense(cursor[0], cursor[1])) {
+					rogue.playbackMode = playingBack;
+					refreshSideBar(cursor[0], cursor[1], false);
+					rogue.playbackMode = false;
+                    focusedOnTerrain = true;
 				}
 				
 				printLocationDescription(cursor[0], cursor[1]);
@@ -507,11 +512,10 @@ void mainInputLoop() {
 					theEvent.shiftKey = theEvent.controlKey = false;
 					doEvent = true;
 				}
-			} else if (state.buttonChosen > -1) { // ^^
+			} else if (state.buttonChosen > -1) {
 				theEvent.eventType = KEYSTROKE;
 				theEvent.param1 = buttons[state.buttonChosen].hotkey[0];
 				theEvent.param2 = 0;
-				//theEvent.shiftKey = theEvent.controlKey = false;
 			}
 			state.buttonChosen = -1;
 			
@@ -529,9 +533,10 @@ void mainInputLoop() {
 				}
 			}
 
-			if (focusedOnMonster || focusedOnItem) {
+			if (focusedOnMonster || focusedOnItem || focusedOnTerrain) {
 				focusedOnMonster = false;
 				focusedOnItem = false;
+                focusedOnTerrain = false;
 				if (textDisplayed) {
 					overlayDisplayBuffer(rbuf, 0); // Erase the monster info window.
 				}
@@ -540,8 +545,8 @@ void mainInputLoop() {
 				rogue.playbackMode = false;
 			}
             
-			if (tabKey && !playingBack) { // The tab key cycles the cursor through monsters and items.
-				if (nextTargetAfter(&newX, &newY, cursor[0], cursor[1], true, true, true, false)) {
+			if (tabKey && !playingBack) { // The tab key cycles the cursor through monsters, items and terrain features.
+				if (nextTargetAfter(&newX, &newY, cursor[0], cursor[1], true, true, true, true, false)) {
                     cursor[0] = newX;
                     cursor[1] = newY;
                 }
@@ -591,9 +596,9 @@ void mainInputLoop() {
 					confirmMessages();
 				} else if (abs(player.xLoc - cursor[0]) + abs(player.yLoc - cursor[1]) == 1 // horizontal or vertical
 						   || (distanceBetween(player.xLoc, player.yLoc, cursor[0], cursor[1]) == 1 // includes diagonals
-							   && ((!cellHasTerrainFlag(player.xLoc, cursor[1], T_OBSTRUCTS_PASSABILITY) && !cellHasTerrainFlag(cursor[0], player.yLoc, T_OBSTRUCTS_PASSABILITY))
+							   && (!diagonalBlocked(player.xLoc, player.yLoc, cursor[0], cursor[1])
                                    || ((pmap[cursor[0]][cursor[1]].flags & HAS_MONSTER) && (monsterAtLoc(cursor[0], cursor[1])->info.flags & MONST_ATTACKABLE_THRU_WALLS)) // there's a turret there
-                                   || !(~terrainFlags(cursor[0], cursor[1]) & (T_OBSTRUCTS_PASSABILITY | T_PROMOTES_ON_PLAYER_ENTRY))))) { // there's a lever there
+                                   || ((terrainFlags(cursor[0], cursor[1]) & T_OBSTRUCTS_PASSABILITY) && (terrainMechFlags(cursor[0], cursor[1]) & TM_PROMOTES_ON_PLAYER_ENTRY))))) { // there's a lever there
 							   // Clicking one space away will cause the player to try to move there directly irrespective of path.
 							   for (dir=0;
 									dir<8 && (player.xLoc + nbDirs[dir][0] != cursor[0] || player.yLoc + nbDirs[dir][1] != cursor[1]);
@@ -648,7 +653,7 @@ void mainInputLoop() {
 	
 	rogue.playbackMode = playingBack;
 	refreshSideBar(-1, -1, false);
-	freeDynamicGrid(costMap);
+	freeGrid(costMap);
 }
 
 // accuracy depends on how many clock cycles occur per second
@@ -747,9 +752,9 @@ void shuffleTerrainColors(short percentOfCells, boolean refreshCells) {
 	for (i=0; i<DCOLS; i++) {
 		for(j=0; j<DROWS; j++) {
 			if (playerCanSeeOrSense(i, j)
-				&& (!rogue.automationActive || !(rogue.turnNumber % 5))
+				&& (!rogue.automationActive || !(rogue.playerTurnNumber % 5))
 				&& ((pmap[i][j].flags & TERRAIN_COLORS_DANCING)
-					|| (player.status[STATUS_HALLUCINATING] && (pmap[i][j].flags & VISIBLE)))
+					|| (player.status[STATUS_HALLUCINATING] && playerCanDirectlySee(i, j)))
 				&& (i != rogue.cursorLoc[0] || j != rogue.cursorLoc[1])
 				&& (percentOfCells >= 100 || rand_range(1, 100) <= percentOfCells)) {
 					
@@ -843,7 +848,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 	
 	if (!playerCanSeeOrSense(x, y)
 		&& !(pmap[x][y].flags & (ITEM_DETECTED | HAS_PLAYER))
-		&& (!player.status[STATUS_TELEPATHIC] || !monst || (monst->info.flags & MONST_INANIMATE))
+		&& (!monst || !monsterRevealed(monst))
 		&& !monsterWithDetectedItem
 		&& (pmap[x][y].flags & (DISCOVERED | MAGIC_MAPPED))
 		&& (pmap[x][y].flags & STABLE_MEMORY)) {
@@ -871,7 +876,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 			// Gas shows up as a color average, not directly.
 			if (pmap[x][y].layers[layer] && layer != GAS) {
                 tile = pmap[x][y].layers[layer];
-                if (rogue.playbackOmniscience && (tileCatalog[tile].flags & T_IS_SECRET)) {
+                if (rogue.playbackOmniscience && (tileCatalog[tile].mechFlags & TM_IS_SECRET)) {
                     tile = dungeonFeatureCatalog[tileCatalog[tile].discoverType].tile;
                 }
 				
@@ -892,6 +897,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 					
 					cellChar = tileCatalog[tile].displayChar;
 					bestCharPriority = tileCatalog[tile].drawPriority;
+                    needDistinctness = (tileCatalog[tile].mechFlags & TM_VISUALLY_DISTINCT) ? true : false;
 				}
 			}
 		}
@@ -920,8 +926,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 			needDistinctness = true;
 		} else if (((pmap[x][y].flags & HAS_ITEM) && (pmap[x][y].flags & ITEM_DETECTED)
 					&& itemMagicChar(theItem)
-					&& (!playerCanSeeOrSense(x, y) ||
-						cellHasTerrainFlag(x, y, T_OBSTRUCTS_ITEMS)))
+					&& (!playerCanSeeOrSense(x, y) || cellHasTerrainFlag(x, y, T_OBSTRUCTS_ITEMS)))
 				   || monsterWithDetectedItem){
 			cellChar = itemMagicChar(theItem);
 			cellForeColor = white;
@@ -935,14 +940,15 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 		} else if ((pmap[x][y].flags & HAS_MONSTER)
 				   && (playerCanSeeOrSense(x, y) || ((monst->info.flags & MONST_IMMOBILE) && (pmap[x][y].flags & DISCOVERED)))
 				   && (!monst->status[STATUS_INVISIBLE] || monst->creatureState == MONSTER_ALLY || rogue.playbackOmniscience)
-				   && (!(monst->bookkeepingFlags & MONST_SUBMERGED) || rogue.inWater)) {
+				   && (!(monst->bookkeepingFlags & MONST_SUBMERGED) || rogue.inWater || rogue.playbackOmniscience)) {
 			needDistinctness = true;
 			if (player.status[STATUS_HALLUCINATING] > 0 && !(monst->info.flags & MONST_INANIMATE) && !rogue.playbackOmniscience) {
 				cellChar = rand_range('a', 'z') + (rand_range(0, 1) ? 'A' - 'a' : 0);
 				cellForeColor = *(monsterCatalog[rand_range(1, NUMBER_MONSTER_KINDS - 1)].foreColor);
 			} else {
 				cellChar = monst->info.displayChar;
-				if (monst->status[STATUS_INVISIBLE]) { // Invisible allies show up on the screen with a transparency effect.
+				if (monst->status[STATUS_INVISIBLE] || (monst->bookkeepingFlags & MONST_SUBMERGED)) {
+                    // Invisible allies show up on the screen with a transparency effect.
 					cellForeColor = cellBackColor;
 				} else {
 					cellForeColor = *(monst->info.foreColor);
@@ -954,9 +960,8 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 				}
 				//DEBUG if (monst->bookkeepingFlags & MONST_LEADER) applyColorAverage(&cellBackColor, &purple, 50);
 			}
-		} else if (player.status[STATUS_TELEPATHIC] > 0
-				   && (pmap[x][y].flags & (HAS_MONSTER | HAS_DORMANT_MONSTER))
-				   && !(monst->info.flags & MONST_INANIMATE)
+		} else if (monst
+                   && monsterRevealed(monst)
 				   && !canSeeMonster(monst)) {
 			if (player.status[STATUS_HALLUCINATING] && !rogue.playbackOmniscience) {
 				cellChar = (rand_range(0, 1) ? 'X' : 'x');
@@ -970,7 +975,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 				gasAugmentColor = black;
 			}
 		} else if ((pmap[x][y].flags & HAS_ITEM) && !cellHasTerrainFlag(x, y, T_OBSTRUCTS_ITEMS)
-				   && (playerCanSeeOrSense(x, y) || (pmap[x][y].flags & (DISCOVERED) && !cellHasTerrainFlag(x, y, T_MOVES_ITEMS))) ) {
+				   && (playerCanSeeOrSense(x, y) || ((pmap[x][y].flags & DISCOVERED) && !cellHasTerrainFlag(x, y, T_MOVES_ITEMS)))) {
 			needDistinctness = true;
 			if (player.status[STATUS_HALLUCINATING] && !rogue.playbackOmniscience) {
 				cellChar = itemChars[rand_range(0, 9)];
@@ -997,7 +1002,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 			// phantoms create sillhouettes in gas clouds
 			if ((pmap[x][y].flags & HAS_MONSTER)
 				&& monst->status[STATUS_INVISIBLE]
-				&& (playerCanSeeOrSense(x, y) || !player.status[STATUS_TELEPATHIC] || (monst->info.flags & MONST_INANIMATE))) {
+				&& (playerCanSeeOrSense(x, y) || !monsterRevealed(monst))) {
 				
 				if (player.status[STATUS_HALLUCINATING] && !rogue.playbackOmniscience) {
 					cellChar = monsterCatalog[rand_range(1, NUMBER_MONSTER_KINDS - 1)].displayChar;
@@ -1011,7 +1016,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 		
 		if (!(pmap[x][y].flags & (ANY_KIND_OF_VISIBLE | ITEM_DETECTED | HAS_PLAYER))
 			&& !playerCanSeeOrSense(x, y)
-			&& (!player.status[STATUS_TELEPATHIC] || !monst || (monst->info.flags & MONST_INANIMATE)) && !monsterWithDetectedItem) {
+			&& (!monst || monsterRevealed(monst)) && !monsterWithDetectedItem) {
 			
 			bakeTerrainColors(&cellForeColor, &cellBackColor, x, y);
 			
@@ -1031,7 +1036,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 			pmap[x][y].flags |= STABLE_MEMORY;
 			pmap[x][y].rememberedTerrain = pmap[x][y].layers[highestPriorityLayer(x, y, false)];
 			if (pmap[x][y].flags & HAS_ITEM) {
-				for (theItem = floorItems->nextItem; (theItem->xLoc != x || theItem->yLoc != y); theItem = theItem->nextItem);
+                theItem = itemAtLoc(x, y);
 				pmap[x][y].rememberedItemCategory = theItem->category;
 			} else {
 				pmap[x][y].rememberedItemCategory = 0;
@@ -1044,8 +1049,7 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 	}
 	
 	if (((pmap[x][y].flags & ITEM_DETECTED) || monsterWithDetectedItem
-		 || (player.status[STATUS_TELEPATHIC] > 0 && (pmap[x][y].flags & (HAS_MONSTER | HAS_DORMANT_MONSTER))
-			 && monst && !(monst->info.flags & MONST_INANIMATE)))
+		 || (monst && monsterRevealed(monst)))
 		&& !playerCanSeeOrSense(x, y)) {
 		// do nothing
 	} else if (!(pmap[x][y].flags & VISIBLE) && (pmap[x][y].flags & CLAIRVOYANT_VISIBLE)) {
@@ -1089,7 +1093,9 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 			applyColorAverage(&cellForeColor, &black, 80);
 			applyColorAverage(&cellBackColor, &black, 80);
 		} else {
-			if (!rogue.trueColorMode || !needDistinctness) {
+			if (!cellHasTMFlag(x, y, TM_BRIGHT_MEMORY)
+                && (!rogue.trueColorMode || !needDistinctness)) {
+                
 				applyColorMultiplier(&cellForeColor, &memoryColor);
 				applyColorAverage(&cellForeColor, &memoryOverlay, 25);
 			}
@@ -1140,13 +1146,27 @@ void getCellAppearance(short x, short y, uchar *returnChar, color *returnForeCol
 	
 	if (D_EMPHASIZE_LIGHTING_LEVELS) {
 		if (displayDetail[x][y] == DV_DARK) {
-			applyColorAverage(&cellForeColor, &purple, 25);
-			applyColorAverage(&cellBackColor, &purple, 25);
+			// applyColorAugment(&cellForeColor, &purple, 10);
+			// applyColorAugment(&cellBackColor, &purple, 10);
+            applyColorMultiplier(&cellForeColor, &inDarknessMultiplierColor);
+            applyColorMultiplier(&cellBackColor, &inDarknessMultiplierColor);
 		} else if (displayDetail[x][y] == DV_LIT) {
-			applyColorAverage(&cellForeColor, &yellow, 25);
-			applyColorAverage(&cellBackColor, &yellow, 25);
+			// applyColorAugment(&cellForeColor, &yellow, 10);
+			// applyColorAugment(&cellBackColor, &yellow, 10);
+            applyColorMultiplier(&cellForeColor, &inLightMultiplierColor);
+            applyColorMultiplier(&cellBackColor, &inLightMultiplierColor);
+            
 		}
 	}
+    if (D_SCENT_VISION) {
+        if (rogue.scentTurnNumber > (unsigned short) scentMap[x][y]) {
+            cellBackColor.red = rogue.scentTurnNumber - (unsigned short) scentMap[x][y];
+            cellBackColor.red = clamp(cellBackColor.red, 0, 100);
+        } else {
+            cellBackColor.green = abs(rogue.scentTurnNumber - (unsigned short) scentMap[x][y]);
+            cellBackColor.green = clamp(cellBackColor.green, 0, 100);
+        }
+    }
 	
 	*returnChar = cellChar;
 	*returnForeColor = cellForeColor;
@@ -1161,10 +1181,10 @@ void refreshDungeonCell(short x, short y) {
 #endif
 	color foreColor, backColor;
 	getCellAppearance(x, y, &cellChar, &foreColor, &backColor);
-	plotCharWithColor(cellChar, mapToWindowX(x), mapToWindowY(y), foreColor, backColor);
+	plotCharWithColor(cellChar, mapToWindowX(x), mapToWindowY(y), &foreColor, &backColor);
 }
 
-void applyColorMultiplier(color *baseColor, color *multiplierColor) {
+void applyColorMultiplier(color *baseColor, const color *multiplierColor) {
 	baseColor->red = baseColor->red * multiplierColor->red / 100;
 	baseColor->redRand = baseColor->redRand * multiplierColor->redRand / 100;
 	baseColor->green = baseColor->green * multiplierColor->green / 100;
@@ -1201,13 +1221,23 @@ void applyColorAugment(color *baseColor, const color *augmentingColor, short aug
 }
 
 void applyColorScalar(color *baseColor, short scalar) {
-	baseColor->red *= scalar / 100;
-	baseColor->redRand *= scalar / 100;
-	baseColor->green *= scalar / 100;
-	baseColor->greenRand *= scalar / 100;
-	baseColor->blue *= scalar / 100;
-	baseColor->blueRand *= scalar / 100;
-	baseColor->rand *= scalar / 100;
+	baseColor->red          = baseColor->red        * scalar / 100;
+	baseColor->redRand      = baseColor->redRand    * scalar / 100;
+	baseColor->green        = baseColor->green      * scalar / 100;
+	baseColor->greenRand    = baseColor->greenRand  * scalar / 100;
+	baseColor->blue         = baseColor->blue       * scalar / 100;
+	baseColor->blueRand     = baseColor->blueRand   * scalar / 100;
+	baseColor->rand         = baseColor->rand       * scalar / 100;
+}
+
+void applyColorBounds(color *baseColor, short lowerBound, short upperBound) {
+	baseColor->red          = clamp(baseColor->red, lowerBound, upperBound);
+	baseColor->redRand      = clamp(baseColor->redRand, lowerBound, upperBound);
+	baseColor->green        = clamp(baseColor->green, lowerBound, upperBound);
+	baseColor->greenRand    = clamp(baseColor->greenRand, lowerBound, upperBound);
+	baseColor->blue         = clamp(baseColor->blue, lowerBound, upperBound);
+	baseColor->blueRand     = clamp(baseColor->blueRand, lowerBound, upperBound);
+	baseColor->rand         = clamp(baseColor->rand, lowerBound, upperBound);
 }
 
 void desaturate(color *baseColor, short weight) {
@@ -1324,7 +1354,7 @@ void irisFadeBetweenBuffers(cellDisplayBuffer fromBuf[COLS][ROWS],
                 toChar = toBuf[i][j].character;
                 
                 blendAppearances(&fromForeColor, &fromBackColor, fromChar, &toForeColor, &toBackColor, toChar, &currentForeColor, &currentBackColor, &currentChar, clamp(thisCellPercent, 0, 100));
-                plotCharWithColor(currentChar, i, j, currentForeColor, currentBackColor);
+                plotCharWithColor(currentChar, i, j, &currentForeColor, &currentBackColor);
             }
         }
         
@@ -1342,7 +1372,7 @@ void colorBlendCell(short x, short y, color *hiliteColor, short hiliteStrength) 
 	getCellAppearance(x, y, &displayChar, &foreColor, &backColor);
 	applyColorAverage(&foreColor, hiliteColor, hiliteStrength);
 	applyColorAverage(&backColor, hiliteColor, hiliteStrength);
-	plotCharWithColor(displayChar, mapToWindowX(x), mapToWindowY(y), foreColor, backColor);
+	plotCharWithColor(displayChar, mapToWindowX(x), mapToWindowY(y), &foreColor, &backColor);
 }
 
 // takes dungeon coordinates
@@ -1358,30 +1388,38 @@ void hiliteCell(short x, short y, const color *hiliteColor, short hiliteStrength
 	if (distinctColors) {
 		separateColors(&foreColor, &backColor);
 	}
-	plotCharWithColor(displayChar, mapToWindowX(x), mapToWindowY(y), foreColor, backColor);
+	plotCharWithColor(displayChar, mapToWindowX(x), mapToWindowY(y), &foreColor, &backColor);
 	
 	restoreRNG;
 }
 
+short adjustedLightValue(short x) {
+    if (x <= LIGHT_SMOOTHING_THRESHOLD) {
+        return x;
+    } else {
+        return (short) (sqrt(((float) x)/LIGHT_SMOOTHING_THRESHOLD)*LIGHT_SMOOTHING_THRESHOLD + FLOAT_FUDGE);
+    }
+}
+
 void colorMultiplierFromDungeonLight(short x, short y, color *editColor) {
 	
-	editColor->red		= editColor->redRand	= max(0, tmap[x][y].light[0]);
-	editColor->green	= editColor->greenRand	= max(0, tmap[x][y].light[1]);
-	editColor->blue		= editColor->blueRand	= max(0, tmap[x][y].light[2]);
+	editColor->red		= editColor->redRand	= adjustedLightValue(max(0, tmap[x][y].light[0]));
+	editColor->green	= editColor->greenRand	= adjustedLightValue(max(0, tmap[x][y].light[1]));
+	editColor->blue		= editColor->blueRand	= adjustedLightValue(max(0, tmap[x][y].light[2]));
 	
-	editColor->rand = max(0, tmap[x][y].light[0] + tmap[x][y].light[1] + tmap[x][y].light[2]) / 3;
+	editColor->rand = adjustedLightValue(max(0, tmap[x][y].light[0] + tmap[x][y].light[1] + tmap[x][y].light[2]) / 3);
 	editColor->colorDances = false;
 }
 
-void plotCharWithColor(uchar inputChar, short xLoc, short yLoc, color cellForeColor, color cellBackColor) {
+void plotCharWithColor(uchar inputChar, short xLoc, short yLoc, const color *cellForeColor, const color *cellBackColor) {
 	
-	short foreRed = cellForeColor.red,
-	foreGreen = cellForeColor.green,
-	foreBlue = cellForeColor.blue,
+	short foreRed = cellForeColor->red,
+	foreGreen = cellForeColor->green,
+	foreBlue = cellForeColor->blue,
 	
-	backRed = cellBackColor.red,
-	backGreen = cellBackColor.green,
-	backBlue = cellBackColor.blue,
+	backRed = cellBackColor->red,
+	backGreen = cellBackColor->green,
+	backBlue = cellBackColor->blue,
 	
 	foreRand, backRand;
 	
@@ -1395,14 +1433,14 @@ void plotCharWithColor(uchar inputChar, short xLoc, short yLoc, color cellForeCo
 	
 	assureCosmeticRNG;
 	
-	foreRand = rand_range(0, cellForeColor.rand);
-	backRand = rand_range(0, cellBackColor.rand);
-	foreRed += rand_range(0, cellForeColor.redRand) + foreRand;
-	foreGreen += rand_range(0, cellForeColor.greenRand) + foreRand;
-	foreBlue += rand_range(0, cellForeColor.blueRand) + foreRand;
-	backRed += rand_range(0, cellBackColor.redRand) + backRand;
-	backGreen += rand_range(0, cellBackColor.greenRand) + backRand;
-	backBlue += rand_range(0, cellBackColor.blueRand) + backRand;
+	foreRand = rand_range(0, cellForeColor->rand);
+	backRand = rand_range(0, cellBackColor->rand);
+	foreRed += rand_range(0, cellForeColor->redRand) + foreRand;
+	foreGreen += rand_range(0, cellForeColor->greenRand) + foreRand;
+	foreBlue += rand_range(0, cellForeColor->blueRand) + foreRand;
+	backRed += rand_range(0, cellBackColor->redRand) + backRand;
+	backGreen += rand_range(0, cellBackColor->greenRand) + backRand;
+	backBlue += rand_range(0, cellBackColor->blueRand) + backRand;
 	
 	foreRed =		min(100, max(0, foreRed));
 	foreGreen =		min(100, max(0, foreGreen));
@@ -1443,7 +1481,7 @@ void plotCharWithColor(uchar inputChar, short xLoc, short yLoc, color cellForeCo
 
 void plotCharToBuffer(uchar inputChar, short x, short y, color *foreColor, color *backColor, cellDisplayBuffer dbuf[COLS][ROWS]) {
 	if (!dbuf) {
-		plotCharWithColor(inputChar, x, y, *foreColor, *backColor);
+		plotCharWithColor(inputChar, x, y, foreColor, backColor);
 		return;
 	}
 	
@@ -1501,7 +1539,7 @@ void dumpLevelToScreen() {
 				refreshDungeonCell(i, j);
 				pmap[i][j] = backup;
 			} else {
-				plotCharWithColor(' ', mapToWindowX(i), mapToWindowY(j), white, black);
+				plotCharWithColor(' ', mapToWindowX(i), mapToWindowY(j), &white, &black);
 			}
 
 		}
@@ -1510,8 +1548,8 @@ void dumpLevelToScreen() {
 }
 
 // To be used immediately after dumpLevelToScreen() above.
-// Highlight the portion indicated by hiliteGrid with the hiliteColor at the hiliteStrength -- both latter arguments are optional.
-void hiliteGrid(char hiliteGrid[DCOLS][DROWS], color *hiliteColor, short hiliteStrength) {
+// Highlight the portion indicated by hiliteCharGrid with the hiliteColor at the hiliteStrength -- both latter arguments are optional.
+void hiliteCharGrid(char hiliteCharGrid[DCOLS][DROWS], color *hiliteColor, short hiliteStrength) {
 	short i, j, x, y;
 	color hCol;
 	
@@ -1531,7 +1569,7 @@ void hiliteGrid(char hiliteGrid[DCOLS][DROWS], color *hiliteColor, short hiliteS
 	
 	for (i=0; i<DCOLS; i++) {
 		for (j=0; j<DROWS; j++) {
-			if (hiliteGrid[i][j]) {
+			if (hiliteCharGrid[i][j]) {
 				x = mapToWindowX(i);
 				y = mapToWindowY(j);
 				
@@ -1553,7 +1591,17 @@ void blackOutScreen() {
 	
 	for (i=0; i<COLS; i++) {
 		for (j=0; j<ROWS; j++) {
-			plotCharWithColor(' ', i, j, black, black);
+			plotCharWithColor(' ', i, j, &black, &black);
+		}
+	}
+}
+
+void colorOverDungeon(const color *color) {
+	short i, j;
+	
+	for (i=0; i<DCOLS; i++) {
+		for (j=0; j<DROWS; j++) {
+			plotCharWithColor(' ', mapToWindowX(i), mapToWindowY(j), color, color);
 		}
 	}
 }
@@ -1622,7 +1670,7 @@ void overlayDisplayBuffer(cellDisplayBuffer overBuf[COLS][ROWS], cellDisplayBuff
 				tempColor = colorFromComponents(displayBuffer[i][j].backColorComponents);
 				applyColorAverage(&backColor, &tempColor, 100 - overBuf[i][j].opacity);
 				
-				plotCharWithColor(character, i, j, foreColor, backColor);
+				plotCharWithColor(character, i, j, &foreColor, &backColor);
 			}
 		}
 	}
@@ -1656,7 +1704,7 @@ void flashForeground(short *x, short *y, color **flashColor, short *flashStrengt
 			percent = flashStrength[i] * j / frames;
 			newColor = fColor[i];
 			applyColorAverage(&newColor, flashColor[i], percent);
-			plotCharWithColor(displayChar[i], mapToWindowX(x[i]), mapToWindowY(y[i]), newColor, bColor[i]);
+			plotCharWithColor(displayChar[i], mapToWindowX(x[i]), mapToWindowY(y[i]), &newColor, &(bColor[i]));
 		}
 		if (j) {
 			if (pauseBrogue(1)) {
@@ -1685,7 +1733,7 @@ void flash(color *theColor, short frames, short x, short y) {
 }
 
 // special effect expanding flash of light at dungeon coordinates (x, y) restricted to tiles with matching flags
-void lightFlash(const color *theColor, unsigned long reqTerrainFlags,
+void colorFlash(const color *theColor, unsigned long reqTerrainFlags,
 				unsigned long reqTileFlags, short frames, short maxRadius, short x, short y) {
 	short i, j, k, intensity, currentRadius, fadeOut;
 	short localRadius[DCOLS][DROWS];
@@ -1737,22 +1785,24 @@ void lightFlash(const color *theColor, unsigned long reqTerrainFlags,
 #define bCurve(x)	(((x) * (x) + 11) / (10 * ((x) * (x) + 1)) - 0.1)
 
 // x and y are global coordinates, not within the playing square
-void funkyFade(cellDisplayBuffer displayBuf[COLS][ROWS], color *colorStart,
-			   color *colorEnd, short stepCount, short x, short y, boolean invert) {
+void funkyFade(cellDisplayBuffer displayBuf[COLS][ROWS], const color *colorStart,
+			   const color *colorEnd, short stepCount, short x, short y, boolean invert) {
 	short i, j, n, weight;
 	double x2, y2, weightGrid[COLS][ROWS][3], percentComplete;
 	color tempColor, colorMid, foreColor, backColor;
 	uchar tempChar;
 	short **distanceMap;
 	boolean fastForward;
+    
+    assureCosmeticRNG;
 	
 #ifdef BROGUE_LIBTCOD
 	stepCount *= 15; // libtcod displays much faster
 #endif
 	
 	fastForward = false;
-	distanceMap = allocDynamicGrid();
-	fillDynamicGrid(distanceMap, 0);
+	distanceMap = allocGrid();
+	fillGrid(distanceMap, 0);
 	calculateDistances(distanceMap, player.xLoc, player.yLoc, T_OBSTRUCTS_PASSABILITY, 0, true, true);
 	
 	for (i=0; i<COLS; i++) {
@@ -1763,7 +1813,6 @@ void funkyFade(cellDisplayBuffer displayBuf[COLS][ROWS], color *colorStart,
 			weightGrid[i][j][0] = bCurve(x2*x2+y2*y2) * (.7 + .3 * cos(5*x2*x2) * cos(5*y2*y2));
 			weightGrid[i][j][1] = bCurve(x2*x2+y2*y2) * (.7 + .3 * sin(5*x2*x2) * cos(5*y2*y2));
 			weightGrid[i][j][2] = bCurve(x2*x2+y2*y2);
-			
 		}	
 	}
 	
@@ -1819,7 +1868,7 @@ void funkyFade(cellDisplayBuffer displayBuf[COLS][ROWS], color *colorStart,
 					applyColorAverage(&foreColor, &tempColor, weight);
 				}
 				applyColorAverage(&backColor, &tempColor, weight);
-				plotCharWithColor(tempChar, i, j, foreColor, backColor);
+				plotCharWithColor(tempChar, i, j, &foreColor, &backColor);
 			}
 		}
 		if (!fastForward && pauseBrogue(1)) {
@@ -1828,7 +1877,28 @@ void funkyFade(cellDisplayBuffer displayBuf[COLS][ROWS], color *colorStart,
 		}
 	}
 	
-	freeDynamicGrid(distanceMap);
+	freeGrid(distanceMap);
+    
+    restoreRNG;
+}
+
+void displayWaypoints() {
+    short i, j, w, lowestDistance;
+    
+    for (i=0; i<DCOLS; i++) {
+        for (j=0; j<DROWS; j++) {
+            lowestDistance = 30000;
+            for (w=0; w<rogue.wpCount; w++) {
+                if (rogue.wpDistance[w][i][j] < lowestDistance) {
+                    lowestDistance = rogue.wpDistance[w][i][j];
+                }
+            }
+            if (lowestDistance < 10) {
+                hiliteCell(i, j, &white, clamp(100 - lowestDistance*15, 0, 100), true);
+            }
+        }
+    }
+    temporaryMessage("Waypoints:", true);
 }
 
 void displayMachines() {
@@ -1850,7 +1920,15 @@ void displayMachines() {
 			if (pmap[i][j].machineNumber) {
 				getCellAppearance(i, j, &dchar, &foreColor, &backColor);
 				applyColorAugment(&backColor, &(machineColors[pmap[i][j].machineNumber]), 50);
-				plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, backColor);
+				//plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
+                if (pmap[i][j].machineNumber < 10) {
+                    dchar ='0' + pmap[i][j].machineNumber;
+                } else if (pmap[i][j].machineNumber < 10 + 26) {
+                    dchar = 'a' + pmap[i][j].machineNumber - 10;
+                } else {
+                    dchar = 'A' + pmap[i][j].machineNumber - 10 - 26;
+                }
+                plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
 			}
 		}
 	}
@@ -1872,12 +1950,12 @@ void displayChokeMap() {
 				if (pmap[i][j].flags & IS_GATE_SITE) {
 					getCellAppearance(i, j, &dchar, &foreColor, &backColor);
 					applyColorAugment(&backColor, &teal, 50);
-					plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, backColor);
+					plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
 				} else
 					if (chokeMap[i][j] < CHOKEMAP_DISPLAY_CUTOFF) {
 					getCellAppearance(i, j, &dchar, &foreColor, &backColor);
 					applyColorAugment(&backColor, &red, 100 - chokeMap[i][j] * 100 / CHOKEMAP_DISPLAY_CUTOFF);
-					plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, backColor);
+					plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
 				}
 			}
 		}
@@ -1896,13 +1974,13 @@ void displayLoops() {
 			if (pmap[i][j].flags & IN_LOOP) {
 				getCellAppearance(i, j, &dchar, &foreColor, &backColor);
 				applyColorAugment(&backColor, &yellow, 50);
-				plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, backColor);
+				plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
 				//colorBlendCell(i, j, &tempColor, 100);//hiliteCell(i, j, &tempColor, 100, true);
 			}
 			if (pmap[i][j].flags & IS_CHOKEPOINT) {
 				getCellAppearance(i, j, &dchar, &foreColor, &backColor);
 				applyColorAugment(&backColor, &teal, 50);
-				plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, backColor);
+				plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &backColor);
 			}
 		}
 	}
@@ -1915,6 +1993,7 @@ boolean pauseBrogue(short milliseconds) {
 	commitDraws();
 	if (rogue.playbackMode && rogue.playbackFastForward) {
 		interrupted = pauseForMilliseconds(1);
+        interrupted = true;
 	} else {
 		interrupted = pauseForMilliseconds(milliseconds);
 	}
@@ -2041,7 +2120,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			} else {
 				routeTo(rogue.downLoc[0], rogue.downLoc[1], "I see no way down.");
 			}
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case ASCEND_KEY:
 			considerCautiousMode();
@@ -2051,7 +2130,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			} else {
 				routeTo(rogue.upLoc[0], rogue.upLoc[1], "I see no way up.");
 			}
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case REST_KEY:
 		case PERIOD_KEY:
@@ -2060,7 +2139,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			rogue.justRested = true;
 			recordKeystroke(REST_KEY, false, false);
 			playerTurnEnded();
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case AUTO_REST_KEY:
 			rogue.justRested = true;
@@ -2071,7 +2150,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			considerCautiousMode();
 			search(rogue.awarenessBonus < 0 ? 40 : 80);
 			playerTurnEnded();
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case MENU_KEY:
 			actionMenu(0, 0, rogue.playbackMode);
@@ -2081,23 +2160,23 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			break;
 		case EQUIP_KEY:
 			equip(NULL);
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case UNEQUIP_KEY:
 			unequip(NULL);
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case DROP_KEY:
 			drop(NULL);
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case APPLY_KEY:
 			apply(NULL, true);
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case THROW_KEY:
 			throwCommand(NULL);
-			refreshSideBar(-1, -1, false);
+			//refreshSideBar(-1, -1, false);
 			break;
 		case TRUE_COLORS_KEY:
 			rogue.trueColorMode = !rogue.trueColorMode;
@@ -2141,7 +2220,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 				return;
 			}
 			confirmMessages();
-			if ((rogue.turnNumber < 50 || confirm("End this game and view a recording?", false))
+			if ((rogue.playerTurnNumber < 50 || confirm("End this game and view a recording?", false))
 				&& dialogChooseFile(path, RECORDING_SUFFIX, "View recording: ")) {
 				if (fileExists(path)) {
 					strcpy(rogue.nextGamePath, path);
@@ -2157,7 +2236,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 				return;
 			}
 			confirmMessages();
-			if ((rogue.turnNumber < 50 || confirm("End this game and load a saved game?", false))
+			if ((rogue.playerTurnNumber < 50 || confirm("End this game and load a saved game?", false))
 				&& dialogChooseFile(path, GAME_SUFFIX, "Open saved game: ")) {
 				if (fileExists(path)) {
 					strcpy(rogue.nextGamePath, path);
@@ -2177,7 +2256,7 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			}
 			break;
 		case NEW_GAME_KEY:
-			if (rogue.turnNumber < 50 || confirm("End this game and begin a new game?", false)) {
+			if (rogue.playerTurnNumber < 50 || confirm("End this game and begin a new game?", false)) {
 				rogue.nextGame = NG_NEW_GAME;
 				rogue.gameHasEnded = true;
 			}
@@ -2195,11 +2274,11 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 				copyDisplayBuffer(dbuf, displayBuffer);
 				funkyFade(dbuf, &white, 0, 100, mapToWindowX(player.xLoc), mapToWindowY(player.yLoc), false);
 			}*/
-			// DEBUG showWaypoints();
 			// DEBUG displayLoops();
 			// DEBUG displayChokeMap();
 			DEBUG displayMachines();
-			// DEBUG {displayMap(safetyMap); displayMoreSign(); displayLevel();}
+            //DEBUG displayWaypoints();
+			// DEBUG {displayGrid(safetyMap); displayMoreSign(); displayLevel();}
 			// parseFile();
 			// DEBUG spawnDungeonFeature(player.xLoc, player.yLoc, &dungeonFeatureCatalog[DF_METHANE_GAS_ARMAGEDDON], true, false);
 			printSeed();
@@ -2220,13 +2299,14 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 			playerMoves(direction);
 		}
 		refreshSideBar(-1, -1, false);
-		if (D_SAFETY_VISION) {
-			displayMap(safetyMap);
-		}
-		if (D_EMPHASIZE_LIGHTING_LEVELS) {
-			displayLevel();
-		}
 	}
+    
+    if (D_SAFETY_VISION) {
+        displayGrid(safetyMap);
+    }
+    if (D_EMPHASIZE_LIGHTING_LEVELS || D_SCENT_VISION) {
+        displayLevel();
+    }
 	
 	rogue.cautiousMode = false;
 }
@@ -2253,7 +2333,7 @@ boolean getInputTextString(char *inputText,
 		overlayDisplayBuffer(dbuf, rbuf);
 		printString(prompt, x, y - 1, &white, &interfaceBoxColor, NULL);
 		for (i=0; i<maxLength; i++) {
-			plotCharWithColor(' ', x + i, y, black, black);
+			plotCharWithColor(' ', x + i, y, &black, &black);
 		}
 		printString(defaultEntry, x, y, &white, &black, 0);
 	} else {
@@ -2281,18 +2361,18 @@ boolean getInputTextString(char *inputText,
 	
 	do {
 		printString(suffix, charNum + x, y, &gray, &black, 0);
-		plotCharWithColor((suffix[0] ? suffix[0] : ' '), x + charNum, y, black, white);
+		plotCharWithColor((suffix[0] ? suffix[0] : ' '), x + charNum, y, &black, &white);
 		keystroke = nextKeyPress(true);
 		if (keystroke == DELETE_KEY && charNum > 0) {
 			printString(suffix, charNum + x - 1, y, &gray, &black, 0);
-			plotCharWithColor(' ', x + charNum + strlen(suffix) - 1, y, black, black);
+			plotCharWithColor(' ', x + charNum + strlen(suffix) - 1, y, &black, &black);
 			charNum--;
 			inputText[charNum] = ' ';
 		} else if (keystroke >= textEntryBounds[textEntryType][0]
 				   && keystroke <= textEntryBounds[textEntryType][1]) { // allow only permitted input
 			
 			inputText[charNum] = keystroke;
-			plotCharWithColor(keystroke, x + charNum, y, white, black);
+			plotCharWithColor(keystroke, x + charNum, y, &white, &black);
 			printString(suffix, charNum + x + 1, y, &gray, &black, 0);
 			if (charNum < maxLength) {
 				charNum++;
@@ -2361,14 +2441,15 @@ void flashMessage(char *message, short x, short y, int time, color *fColor, colo
 					foreColor = colorFromComponents(dbufs[j].foreColorComponents);
 					applyColorAverage(&foreColor, &backColor, (100 - percentComplete) * 2);
 				}
-				plotCharWithColor(dchar, j+x, y, foreColor, backColor);
+				plotCharWithColor(dchar, j+x, y, &foreColor, &backColor);
 			}
 		}
 		previousPercentComplete = percentComplete;
 		fastForward = pauseBrogue(1);
 	}
 	for (j=0; j<messageLength; j++) {
-		plotCharWithColor(dbufs[j].character, j+x, y, colorFromComponents(dbufs[j].foreColorComponents), backColors[j]);
+        foreColor = colorFromComponents(dbufs[j].foreColorComponents);
+		plotCharWithColor(dbufs[j].character, j+x, y, &foreColor, &(backColors[j]));
 	}
 	
 	restoreRNG;
@@ -2444,6 +2525,10 @@ boolean confirm(char *prompt, boolean alsoDuringPlayback) {
 	return retVal;
 }
 
+void clearMonsterFlashes() {
+    
+}
+
 void displayMonsterFlashes(boolean flashingEnabled) {
 	creature *monst;
 	short x[100], y[100], strength[100], count = 0;
@@ -2460,7 +2545,7 @@ void displayMonsterFlashes(boolean flashingEnabled) {
 	CYCLE_MONSTERS_AND_PLAYERS(monst) {
 		if (monst->bookkeepingFlags & MONST_WILL_FLASH) {
 			monst->bookkeepingFlags &= ~MONST_WILL_FLASH;
-			if (flashingEnabled && canSeeMonster(monst)) {
+			if (flashingEnabled && canSeeMonster(monst) && count < 100) {
 				x[count] = monst->xLoc;
 				y[count] = monst->yLoc;
 				strength[count] = monst->flashStrength;
@@ -2561,7 +2646,7 @@ void temporaryMessage(char *msg, boolean requireAcknowledgment) {
 	
 	for (i=0; i<MESSAGE_LINES; i++) {
 		for (j=0; j<DCOLS; j++) {
-			plotCharWithColor(' ', mapToWindowX(j), i, black, black);
+			plotCharWithColor(' ', mapToWindowX(j), i, &black, &black);
 		}
 	}
 	printString(message, mapToWindowX(0), mapToWindowY(-1), &white, &black, 0);
@@ -2573,7 +2658,7 @@ void temporaryMessage(char *msg, boolean requireAcknowledgment) {
 }
 
 void messageWithColor(char *msg, color *theColor, boolean requireAcknowledgment) {
-	char buf[COLS*2];
+	char buf[COLS*2] = "";
 	short i;
 	
 	i=0;
@@ -2596,7 +2681,7 @@ void flavorMessage(char *msg) {
 	
 	printString(text, mapToWindowX(0), ROWS - 2, &flavorTextColor, &black, 0);
 	for (i = strLenWithoutEscapes(text); i < DCOLS; i++) {
-		plotCharWithColor(' ', mapToWindowX(i), ROWS - 2, black, black);
+		plotCharWithColor(' ', mapToWindowX(i), ROWS - 2, &black, &black);
 	}
 }
 
@@ -2673,6 +2758,15 @@ void message(const char *msg, boolean requireAcknowledgment) {
 	
 	messageWithoutCaps(msgPtr, requireAcknowledgment);
 	restoreRNG;
+}
+
+// Only used for the "you die..." message, to enable posthumous inventory viewing.
+void displayMoreSignWithoutWaitingForAcknowledgment() {
+	if (strLenWithoutEscapes(displayedMessage[0]) < DCOLS - 8 || messageConfirmed[0]) {
+		printString("--MORE--", COLS - 8, MESSAGE_LINES-1, &black, &white, 0);
+	} else {
+		printString("--MORE--", COLS - 8, MESSAGE_LINES, &black, &white, 0);
+	}
 }
 
 void displayMoreSign() {
@@ -2781,11 +2875,11 @@ void updateMessageDisplay() {
 			}
 			
 			plotCharWithColor(displayedMessage[i][m], mapToWindowX(j), MESSAGE_LINES - i - 1,
-							  messageColor,
-							  black);
+							  &messageColor,
+							  &black);
 		}
 		for (; j < DCOLS; j++) {
-			plotCharWithColor(' ', mapToWindowX(j), MESSAGE_LINES - i - 1, black, black);
+			plotCharWithColor(' ', mapToWindowX(j), MESSAGE_LINES - i - 1, &black, &black);
 		}
 	}
 }
@@ -2831,11 +2925,12 @@ enum entityDisplayTypes {
 	EDT_NOTHING = 0,
 	EDT_CREATURE,
 	EDT_ITEM,
+    EDT_TERRAIN,
 };
 
 // Refreshes the sidebar.
 // Progresses from the closest visible monster to the farthest.
-// If a monster or item is focused, then display the sidebar with that monster/item highlighted,
+// If a monster, item or terrain is focused, then display the sidebar with that monster/item highlighted,
 // in the order it would normally appear. If it would normally not fit on the sidebar at all,
 // then list it first.
 // Also update rogue.sidebarLocationList[ROWS][2] list of locations so that each row of
@@ -2844,16 +2939,17 @@ enum entityDisplayTypes {
 // we won't know if it will fit on the screen in normal order until we try.
 // So if we try and fail, this function will call itself again, but with this set to true.
 void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst) {
-	short printY, oldPrintY, shortestDistance, i, j, px, py, x, y, displayEntityCount;
+	short printY, oldPrintY, shortestDistance, i, j, k, px, py, x, y, displayEntityCount;
 	creature *monst, *closestMonst;
 	item *theItem, *closestItem;
 	char buf[COLS];
 	void *entityList[ROWS] = {0}, *focusEntity = NULL;
 	enum entityDisplayTypes entityType[ROWS] = {0}, focusEntityType = EDT_NOTHING;
+    short terrainLocationMap[ROWS][2];
 	boolean gotFocusedEntityOnScreen = (focusX >= 0 ? false : true);
 	char addedEntity[DCOLS][DROWS];
 	
-	if (rogue.gameHasEnded) {
+	if (rogue.gameHasEnded || rogue.playbackFastForward) {
 		return;
 	}
 	
@@ -2876,6 +2972,13 @@ void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst
 				focusEntityType = EDT_ITEM;
 			}
 		}
+        if (!focusEntity
+            && cellHasTMFlag(focusX, focusY, TM_LIST_IN_SIDEBAR)
+            && playerCanSeeOrSense(focusX, focusY)) {
+            
+            focusEntity = tileCatalog[pmap[focusX][focusY].layers[layerWithTMFlag(focusX, focusY, TM_LIST_IN_SIDEBAR)]].description;
+            focusEntityType = EDT_TERRAIN;
+        }
 	}
 	
 	printY = 0;
@@ -2889,8 +2992,8 @@ void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst
 	if (rogue.playbackMode) {
 		printString("   -- PLAYBACK --   ", 0, printY++, &white, &black, 0);
 		if (rogue.howManyTurns > 0) {
-			sprintf(buf, "Turn %li/%li", rogue.turnNumber, rogue.howManyTurns);
-			printProgressBar(0, printY++, buf, rogue.turnNumber, rogue.howManyTurns, &darkPurple, false);
+			sprintf(buf, "Turn %li/%li", rogue.playerTurnNumber, rogue.howManyTurns);
+			printProgressBar(0, printY++, buf, rogue.playerTurnNumber, rogue.howManyTurns, &darkPurple, false);
 		}
 		if (rogue.playbackOOS) {
 			printString("    [OUT OF SYNC]   ", 0, printY++, &badMessageColor, &black, 0);
@@ -2920,6 +3023,8 @@ void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst
 		addedEntity[focusX][focusY] = true;
 		entityList[displayEntityCount] = focusEntity;
 		entityType[displayEntityCount] = focusEntityType;
+        terrainLocationMap[displayEntityCount][0] = focusX;
+        terrainLocationMap[displayEntityCount][1] = focusY;
 		displayEntityCount++;
 	}
 	
@@ -2963,28 +3068,60 @@ void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst
 			displayEntityCount++;
 		}
 	} while (shortestDistance < 10000 && displayEntityCount * 2 < ROWS); // Because each entity takes at least 2 rows in the sidebar.
+    
+    // Non-focused terrain.
+    
+	// count up the number of candidate locations
+	for (k=0; k<max(DROWS, DCOLS); k++) {
+		for (i = px-k; i <= px+k; i++) {
+			for (j = py-k; j <= py+k; j++) {
+				if (coordinatesAreInMap(i, j)
+					&& (i == px-k || i == px+k || j == py-k || j == py+k)
+					&& !addedEntity[i][j]
+                    && playerCanSeeOrSense(i, j)
+                    && cellHasTMFlag(i, j, TM_LIST_IN_SIDEBAR)
+                    && displayEntityCount < ROWS - 1) {
+                    
+                    addedEntity[i][j] = true;
+                    entityList[displayEntityCount] = tileCatalog[pmap[i][j].layers[layerWithTMFlag(i, j, TM_LIST_IN_SIDEBAR)]].description;
+                    entityType[displayEntityCount] = EDT_TERRAIN;
+                    terrainLocationMap[displayEntityCount][0] = i;
+                    terrainLocationMap[displayEntityCount][1] = j;
+                    displayEntityCount++;
+				}
+			}
+		}
+	}
 	
 	// Entities are now listed. Start printing.
 	
 	for (i=0; i<displayEntityCount && printY < ROWS - 1; i++) { // Bottom line is reserved for the depth.
 		oldPrintY = printY;
 		if (entityType[i] == EDT_CREATURE) {
-			printY = printMonsterInfo((creature *) entityList[i],
-									  printY,
-									  (focusEntity && entityList[i] != focusEntity),
-									  (entityList[i] == focusEntity));
 			x = ((creature *) entityList[i])->xLoc;
 			y = ((creature *) entityList[i])->yLoc;
+			printY = printMonsterInfo((creature *) entityList[i],
+									  printY,
+									  (focusEntity && (x != focusX || y != focusY)),
+									  (x == focusX && y == focusY));
 			
 		} else if (entityType[i] == EDT_ITEM) {
-			printY = printItemInfo((item *) entityList[i],
-								   printY,
-								   (focusEntity && entityList[i] != focusEntity),
-								   (entityList[i] == focusEntity));
 			x = ((item *) entityList[i])->xLoc;
 			y = ((item *) entityList[i])->yLoc;
-		}
-		if (focusEntity && entityList[i] == focusEntity && printY < ROWS) {
+			printY = printItemInfo((item *) entityList[i],
+								   printY,
+								   (focusEntity && (x != focusX || y != focusY)),
+								   (x == focusX && y == focusY));
+		} else if (entityType[i] == EDT_TERRAIN) {
+            x = terrainLocationMap[i][0];
+            y = terrainLocationMap[i][1];
+            printY = printTerrainInfo(x, y,
+                                      printY,
+                                      ((const char *) entityList[i]),
+                                      (focusEntity && (x != focusX || y != focusY)),
+                                      (x == focusX && y == focusY));
+        }
+		if (focusEntity && (x == focusX && y == focusY) && printY < ROWS) {
 			gotFocusedEntityOnScreen = true;
 		}
 		for (j=oldPrintY; j<printY; j++) {
@@ -3001,7 +3138,7 @@ void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst
 		sprintf(buf, "  -- Depth: %i --%s   ", rogue.depthLevel, (rogue.depthLevel < 10 ? " " : ""));
 		printString(buf, 0, ROWS - 1, &white, &black, 0);
 	} else if (!focusedEntityMustGoFirst) {
-		// Failed to get the focusMonst printed on the screen. Try again, this time with the focus monster first.
+		// Failed to get the focusMonst printed on the screen. Try again, this time with the focus first.
 		refreshSideBar(focusX, focusY, true);
 	}
 	
@@ -3025,7 +3162,7 @@ void printString(const char *theString, short x, short y, color *foreColor, colo
 		if (dbuf) {
 			plotCharToBuffer(theString[i], x, y, &fColor, backColor, dbuf);
 		} else {
-			plotCharWithColor(theString[i], x, y, fColor, *backColor);
+			plotCharWithColor(theString[i], x, y, &fColor, backColor);
 		}
 	}
 }
@@ -3152,7 +3289,7 @@ short printStringWithWrapping(char *theString, short x, short y, short width, co
 			}
 		} else {
 			if (coordinatesAreInWindow(px, py)) {
-				plotCharWithColor(printString[i], px, py, fColor, *backColor);
+				plotCharWithColor(printString[i], px, py, &fColor, backColor);
 			}
 		}
 		
@@ -3228,7 +3365,7 @@ void printHelpScreen() {
 	// Set the dbuf opacity.
 	for (i=0; i<DCOLS; i++) {
 		for (j=0; j<ROWS; j++) {
-			//plotCharWithColor(' ', mapToWindowX(i), j, black, black);
+			//plotCharWithColor(' ', mapToWindowX(i), j, &black, &black);
 			dbuf[mapToWindowX(i)][j].opacity = INTERFACE_OPACITY;
 		}
 	}
@@ -3464,29 +3601,7 @@ void printHighScores(boolean hiliteMostRecent) {
 	waitForAcknowledgment();
 }
 
-void showWaypoints() {
-	short i, j, k, n, start[2], end[2];
-	short coords[DCOLS][2];
-	
-	for (i = 0; i < numberOfWaypoints; i++) {
-		start[0] = waypoints[i].x;
-		start[1] = waypoints[i].y;
-		for (j = 0; j < waypoints[i].connectionCount; j++) {
-			end[0] = waypoints[i].connection[j][0];
-			end[1] = waypoints[i].connection[j][1];
-			n = getLineCoordinates(coords, start, end);
-			for (k = 0; k < n && (coords[k][0] != end[0] || coords[k][1] != end[1]); k++) {
-				hiliteCell(coords[k][0], coords[k][1], &yellow, 50, true);
-			}
-		}
-	}
-	
-	for (i = 0; i < numberOfWaypoints; i++) {
-		hiliteCell(waypoints[i].x, waypoints[i].y, &white, 50, true);
-	}
-}
-
-void displayMap(short **map) {
+void displayGrid(short **map) {
 	short i, j, score, topRange, bottomRange;
 	color tempColor, foreColor, backColor;
 	uchar dchar;
@@ -3530,7 +3645,7 @@ void displayMap(short **map) {
 			score -= 100;
 			tempColor.green = max(min(score, 100), 0);
 			getCellAppearance(i, j, &dchar, &foreColor, &backColor);
-			plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), foreColor, tempColor);
+			plotCharWithColor(dchar, mapToWindowX(i), mapToWindowY(j), &foreColor, &tempColor);
 			//colorBlendCell(i, j, &tempColor, 100);//hiliteCell(i, j, &tempColor, 100, false);
 		}
 	}
@@ -3539,7 +3654,7 @@ void displayMap(short **map) {
 
 void printSeed() {
 	char buf[COLS];
-	sprintf(buf, "Dungeon seed #%lu; turn #%lu", rogue.seed, rogue.turnNumber);
+	sprintf(buf, "Dungeon seed #%lu; turn #%lu", rogue.seed, rogue.playerTurnNumber);
 	message(buf, false);	
 }
 
@@ -3567,11 +3682,8 @@ void printProgressBar(short x, short y, const char barLabel[COLS], long amtFille
 	
 	if (dim) {
 		applyColorAverage(&progressBarColor, &black, 50);
-		applyColorAverage(&darkenedBarColor, &black, 50);
 	}
-	
 	darkenedBarColor = progressBarColor;
-	
 	applyColorAverage(&darkenedBarColor, &black, 75);
 	
 	labelOffset = (20 - strlen(barLabel)) / 2;
@@ -3593,7 +3705,7 @@ void printProgressBar(short x, short y, const char barLabel[COLS], long amtFille
 		}
 		textColor = (dim ? gray : white);
 		applyColorAverage(&textColor, &currentFillColor, (dim ? 50 : 33));
-		plotCharWithColor(barText[i], x + i, y, textColor, currentFillColor);
+		plotCharWithColor(barText[i], x + i, y, &textColor, &currentFillColor);
 	}
 }
 
@@ -3614,10 +3726,9 @@ void highlightScreenCell(short x, short y, color *highlightColor, short strength
 
 // returns the y-coordinate after the last line printed
 short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight) {
-	char buf[COLS], monstName[COLS], redColorEscape[5], grayColorEscape[5];
+	char buf[COLS], buf2[COLS], monstName[COLS], redColorEscape[5], grayColorEscape[5];
 	uchar monstChar;
 	color monstForeColor, monstBackColor, healthBarColor, tempColor;
-	long amtFilled, amtMax;
 	short initialY, i, j, highlightStrength, displayedArmor;
 	boolean inPath;
 	
@@ -3674,6 +3785,8 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 		inPath = (pmap[monst->xLoc][monst->yLoc].flags & IS_IN_PATH) ? true : false;
 		pmap[monst->xLoc][monst->yLoc].flags &= ~IS_IN_PATH;
 		getCellAppearance(monst->xLoc, monst->yLoc, &monstChar, &monstForeColor, &monstBackColor);
+        applyColorBounds(&monstForeColor, 0, 100);
+        applyColorBounds(&monstBackColor, 0, 100);
 		if (inPath) {
 			pmap[monst->xLoc][monst->yLoc].flags |= IS_IN_PATH;
 		}
@@ -3685,14 +3798,54 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 			applyColorAugment(&monstForeColor, &black, 100);
 			applyColorAugment(&monstBackColor, &black, 100);
 		}
-		plotCharWithColor(monstChar, 0, y, monstForeColor, monstBackColor);
+		plotCharWithColor(monstChar, 0, y, &monstForeColor, &monstBackColor);
 		monsterName(monstName, monst, false);
 		upperCase(monstName);
+        
+        if (monst == &player) {
+            if (player.status[STATUS_INVISIBLE]) {
+                strcat(monstName, " xxxx");
+                encodeMessageColor(monstName, strlen(monstName) - 4, &playerInvisibleColor);
+                strcat(monstName, "(invisible)");
+            } else if (playerInDarkness()) {
+                strcat(monstName, " xxxx");
+                //encodeMessageColor(monstName, strlen(monstName) - 4, &playerInDarknessColor);
+                encodeMessageColor(monstName, strlen(monstName) - 4, &monstForeColor);
+                strcat(monstName, "(dark)");
+            } else if (pmap[player.xLoc][player.yLoc].flags & IS_IN_SHADOW) {
+                
+            } else {
+                strcat(monstName, " xxxx");
+                //encodeMessageColor(monstName, strlen(monstName) - 4, &playerInLightColor);
+                encodeMessageColor(monstName, strlen(monstName) - 4, &monstForeColor);
+                strcat(monstName, "(lit)");
+            }
+        }
+        
         sprintf(buf, ": %s", monstName);
         
 		printString("                   ", 1, y, &white, &black, 0);
 		printString(buf, 1, y++, (dim ? &gray : &white), &black, 0);
 	}
+    
+    // mutation, if any
+    if (y < ROWS - 1
+        && monst->mutationIndex >= 0) {
+        
+        strcpy(buf, "                    ");
+        sprintf(buf2, "xxxx(%s)", mutationCatalog[monst->mutationIndex].title);
+        tempColor = *mutationCatalog[monst->mutationIndex].textColor;
+        if (dim) {
+            applyColorAverage(&tempColor, &black, 50);
+        }
+        encodeMessageColor(buf2, 0, &tempColor);
+        strcpy(buf + ((strLenWithoutEscapes(buf) - strLenWithoutEscapes(buf2)) / 2), buf2);
+        for (i = strlen(buf); i < 20 + 4; i++) {
+            buf[i] = ' ';
+        }
+        buf[24] = '\0';
+		printString(buf, 0, y++, (dim ? &gray : &white), &black, 0);
+    }
 	
 	// hit points
 	if (monst->info.maxHP > 1) {
@@ -3706,7 +3859,6 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 	}
 	
 	if (monst == &player) {
-		
 		// nutrition
 		if (player.status[STATUS_NUTRITION] > HUNGER_THRESHOLD) {
 			printProgressBar(0, y++, "Nutrition", player.status[STATUS_NUTRITION], STOMACH_SIZE, &blueBar, dim);
@@ -3716,7 +3868,7 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 			printProgressBar(0, y++, "Nutrition (Weak)", player.status[STATUS_NUTRITION], STOMACH_SIZE, &blueBar, dim);
 		} else if (player.status[STATUS_NUTRITION] > 0) {
 			printProgressBar(0, y++, "Nutrition (Faint)", player.status[STATUS_NUTRITION], STOMACH_SIZE, &blueBar, dim);
-		} else {
+		} else if (y < ROWS - 1) {
 			printString("      STARVING      ", 0, y++, &badMessageColor, &black, NULL);
 		}
 	}
@@ -3752,10 +3904,14 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 				} else if (monst->bookkeepingFlags & MONST_CAPTIVE && y < ROWS - 1) {
 					printString("     (Captive)      ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 				} else if ((monst->info.flags & MONST_RESTRICTED_TO_LIQUID)
-						   && !cellHasTerrainFlag(monst->xLoc, monst->yLoc, T_ALLOWS_SUBMERGING)) {
+						   && !cellHasTMFlag(monst->xLoc, monst->yLoc, TM_ALLOWS_SUBMERGING)) {
 					printString("     (Helpless)     ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 				} else if (monst->creatureState == MONSTER_SLEEPING && y < ROWS - 1) {
 					printString("     (Sleeping)     ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
+                } else if ((monst->creatureState == MONSTER_ALLY) && y < ROWS - 1) {
+                    printString("       (Ally)       ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
+                } else if (monst->ticksUntilTurn > player.ticksUntilTurn + player.movementSpeed) {
+                    printString("   (Off balance)    ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 				} else if (monst->creatureState == MONSTER_FLEEING && y < ROWS - 1) {
 					printString("     (Fleeing)      ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 				} else if ((monst->creatureState == MONSTER_TRACKING_SCENT) && y < ROWS - 1) {
@@ -3770,8 +3926,6 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 					} else {
 						printString("    (Wandering)     ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 					}
-				} else if ((monst->creatureState == MONSTER_ALLY) && y < ROWS - 1) {
-					printString("       (Ally)       ", 0, y++, (dim ? &darkGray : &gray), &black, 0);
 				}
 			}
 		} else if (monst == &player) {
@@ -3789,7 +3943,7 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
                 
                 displayedArmor = displayedArmorValue();
 				
-				if (!rogue.armor || rogue.armor->flags & ITEM_IDENTIFIED) {
+				if (!rogue.armor || rogue.armor->flags & ITEM_IDENTIFIED || rogue.playbackOmniscience) {
 					
 					sprintf(buf, "Str: %s%i%s  Armor: %i",
 							redColorEscape,
@@ -3801,7 +3955,7 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 							redColorEscape,
 							rogue.strength - player.weaknessAmount,
 							grayColorEscape,
-							(short) (((armorTable[rogue.armor->kind].range.upperBound + armorTable[rogue.armor->kind].range.lowerBound) / 2) / 10 + strengthModifier(rogue.armor)));
+							max(0, (short) (((armorTable[rogue.armor->kind].range.upperBound + armorTable[rogue.armor->kind].range.lowerBound) / 2) / 10 + strengthModifier(rogue.armor))));
 				}
 				//buf[20] = '\0';
 				printString("                    ", 0, y, &white, &black, 0);
@@ -3822,7 +3976,7 @@ short printMonsterInfo(creature *monst, short y, boolean dim, boolean highlight)
 	if (highlight) {
 		for (i=0; i<20; i++) {
 			highlightStrength = (short) (10 * sin(PI * i / (20-1)));
-			for (j=initialY; j < (y == ROWS - 1 ? y : y - 1); j++) {
+			for (j=initialY; j < (y == ROWS - 1 ? y : min(y - 1, ROWS - 1)); j++) {
 				highlightScreenCell(i, j, &white, highlightStrength);
 			}
 		}
@@ -3853,6 +4007,8 @@ short printItemInfo(item *theItem, short y, boolean dim, boolean highlight) {
 		inPath = (pmap[theItem->xLoc][theItem->yLoc].flags & IS_IN_PATH) ? true : false;
 		pmap[theItem->xLoc][theItem->yLoc].flags &= ~IS_IN_PATH;
 		getCellAppearance(theItem->xLoc, theItem->yLoc, &itemChar, &itemForeColor, &itemBackColor);
+        applyColorBounds(&itemForeColor, 0, 100);
+        applyColorBounds(&itemBackColor, 0, 100);
 		if (inPath) {
 			pmap[theItem->xLoc][theItem->yLoc].flags |= IS_IN_PATH;
 		}
@@ -3860,7 +4016,7 @@ short printItemInfo(item *theItem, short y, boolean dim, boolean highlight) {
 			applyColorAverage(&itemForeColor, &black, 50);
 			applyColorAverage(&itemBackColor, &black, 50);
 		}
-		plotCharWithColor(itemChar, 0, y, itemForeColor, itemBackColor);
+		plotCharWithColor(itemChar, 0, y, &itemForeColor, &itemBackColor);
 		printString(":                  ", 1, y, (dim ? &gray : &white), &black, 0);
 		if (rogue.playbackOmniscience || !player.status[STATUS_HALLUCINATING]) {
 			itemName(theItem, name, true, true, (dim ? &gray : &white));
@@ -3887,6 +4043,66 @@ short printItemInfo(item *theItem, short y, boolean dim, boolean highlight) {
 	
 	restoreRNG;
 	return y;
+}
+
+// Returns the y-coordinate after the last line printed.
+short printTerrainInfo(short x, short y, short py, const char *description, boolean dim, boolean highlight) {
+	uchar displayChar;
+	color foreColor, backColor;
+	short initialY, i, j, highlightStrength, lineCount;
+	boolean inPath;
+    char name[DCOLS*2];
+    color textColor;
+	
+	if (py >= ROWS - 1) {
+		return ROWS - 1;
+	}
+	
+	initialY = py;
+	
+	assureCosmeticRNG;
+	
+	if (py < ROWS - 1) {
+		// Unhighlight if it's highlighted as part of the path.
+		inPath = (pmap[x][y].flags & IS_IN_PATH) ? true : false;
+		pmap[x][y].flags &= ~IS_IN_PATH;
+		getCellAppearance(x, y, &displayChar, &foreColor, &backColor);
+        applyColorBounds(&foreColor, 0, 100);
+        applyColorBounds(&backColor, 0, 100);
+		if (inPath) {
+			pmap[x][y].flags |= IS_IN_PATH;
+		}
+		if (dim) {
+			applyColorAverage(&foreColor, &black, 50);
+			applyColorAverage(&backColor, &black, 50);
+		}
+		plotCharWithColor(displayChar, 0, py, &foreColor, &backColor);
+		printString(":                  ", 1, py, (dim ? &gray : &white), &black, 0);
+		strcpy(name, description);
+		upperCase(name);
+		lineCount = wrapText(NULL, name, 20-3);
+		for (i=initialY + 1; i <= initialY + lineCount + 1 && i < ROWS - 1; i++) {
+			printString("                    ", 0, i, (dim ? &darkGray : &gray), &black, 0);
+		}
+        textColor = flavorTextColor;
+        if (dim) {
+            applyColorScalar(&textColor, 50);
+        }
+		py = printStringWithWrapping(name, 3, py, 20-3, &textColor, &black, NULL); // Advances y.
+	}
+	
+	if (highlight) {
+		for (i=0; i<20; i++) {
+			highlightStrength = (short) (10 * sin(PI * i / (20-1)));
+			for (j=initialY; j <= py && j < ROWS - 1; j++) {
+				highlightScreenCell(i, j, &white, highlightStrength);
+			}
+		}
+	}
+	py += 2;
+	
+	restoreRNG;
+	return py;
 }
 
 void rectangularShading(short x, short y, short width, short height,
@@ -3916,7 +4132,7 @@ void rectangularShading(short x, short y, short width, short height,
 //	for (i=0; i<COLS; i++) {
 //		for (j=0; j<ROWS; j++) {
 //			if (i >= x && i < x + width && j >= y && j < y + height) {
-//				plotCharWithColor(' ', i, j, white, darkGreen);
+//				plotCharWithColor(' ', i, j, &white, &darkGreen);
 //			}
 //		}
 //	}
