@@ -90,8 +90,8 @@
 #define MESSAGE_ARCHIVE_LINES	ROWS
 
 // Size of the entire terminal window. These need to be hard-coded here and in Viewport.h
-#define COLS					88
-#define ROWS					(29 + MESSAGE_LINES)
+#define COLS					100
+#define ROWS					(31 + MESSAGE_LINES)
 
 // Size of the portion of the terminal window devoted to displaying the dungeon:
 #define DCOLS					(COLS - STAT_BAR_WIDTH - 1)
