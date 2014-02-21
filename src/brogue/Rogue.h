@@ -26,6 +26,8 @@
 #include <string.h>
 #include "PlatformDefines.h"
 
+#include "coroutine.h"
+
 // unicode: comment this line to revert to ASCII
 
 #define USE_UNICODE
@@ -2332,8 +2334,8 @@ extern "C" {
 	boolean chooseFile(char *path, char *prompt, char *defaultName, char *suffix);
 	boolean openFile(const char *path);
 	void initializeRogue(unsigned long seed);
-	void gameOver(char *killedBy, boolean useCustomPhrasing);
-    void victory(boolean superVictory);
+	boolean gameOver(char *killedBy, boolean useCustomPhrasing);
+    boolean victory(boolean superVictory);
 	void enableEasyMode();
 	int rand_range(int lowerBound, int upperBound);
 	unsigned long seedRandomGenerator(unsigned long seed);
@@ -2388,7 +2390,7 @@ extern "C" {
 				  short foreRed, short foreGreen, short foreBlue);
 	void pausingTimerStartsNow();
 	boolean pauseForMilliseconds(short milliseconds);
-	void nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance);
+	boolean nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance);
 	boolean controlKeyIsDown();
 	boolean shiftKeyIsDown();
 	short getHighScoresList(rogueHighScoresEntry returnList[HIGH_SCORES_COUNT]);
@@ -2397,11 +2399,11 @@ extern "C" {
 	fileEntry *listFiles(short *fileCount, char **dynamicMemoryBuffer);
 	void initializeLaunchArguments(enum NGCommands *command, char *path, unsigned long *seed);
 	
-	char nextKeyPress(boolean textInput);
+	int nextKeyPress(boolean textInput);
 	void refreshSideBar(short focusX, short focusY, boolean focusedEntityMustGoFirst);
-	void printHelpScreen();
-	void printDiscoveriesScreen();
-	void printHighScores(boolean hiliteMostRecent);
+	boolean printHelpScreen();
+	boolean printDiscoveriesScreen();
+	boolean printHighScores(boolean hiliteMostRecent);
 	void displayGrid(short **map);
 	void printSeed();
 	void printProgressBar(short x, short y, const char barLabel[COLS], long amtFilled, long amtMax, color *fillColor, boolean dim);
@@ -2424,8 +2426,8 @@ extern "C" {
 	void displayCenteredAlert(char *message);
 	void flashMessage(char *message, short x, short y, int time, color *fColor, color *bColor);
 	void flashTemporaryAlert(char *message, int time);
-	void waitForAcknowledgment();
-	void waitForKeystrokeOrMouseClick();
+	boolean waitForAcknowledgment();
+	boolean waitForKeystrokeOrMouseClick();
 	boolean confirm(char *prompt, boolean alsoDuringPlayback);
 	void refreshDungeonCell(short x, short y);
 	void applyColorMultiplier(color *baseColor, const color *multiplierColor);
@@ -2461,7 +2463,7 @@ extern "C" {
 	short wrapText(char *to, const char *sourceText, short width);
 	short printStringWithWrapping(char *theString, short x, short y, short width, color *foreColor,
 								  color*backColor, cellDisplayBuffer dbuf[COLS][ROWS]);
-	boolean getInputTextString(char *inputText,
+	int getInputTextString(char *inputText,
 							   const char *prompt,
 							   short maxLength,
 							   const char *defaultEntry,
@@ -2469,10 +2471,10 @@ extern "C" {
 							   short textEntryType,
 							   boolean useDialogBox);
 	void displayChokeMap();
-	void displayLoops();
+	boolean displayLoops();
 	boolean pauseBrogue(short milliseconds);
-	void nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance, boolean realInputEvenInPlayback);
-	void executeMouseClick(rogueEvent *theEvent);
+	boolean nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance, boolean realInputEvenInPlayback);
+	boolean executeMouseClick(rogueEvent *theEvent);
 	void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKey);
 	void initializeLevel();
 	void startLevel (short oldLevelNumber, short stairDirection);
@@ -2508,13 +2510,13 @@ extern "C" {
 	short pathingDistance(short x1, short y1, short x2, short y2, unsigned long blockingTerrainFlags);
     short nextStep(short **distanceMap, short x, short y, creature *monst, boolean reverseDirections);
 	void travelRoute(short path[1000][2], short steps);
-	void travel(short x, short y, boolean autoConfirm);
+	boolean travel(short x, short y, boolean autoConfirm);
     void populateGenericCostMap(short **costMap);
 	void populateCreatureCostMap(short **costMap, creature *monst);
 	void getExploreMap(short **map, boolean headingToStairs);
 	boolean explore(short frameDelay);
 	void clearCursorPath();
-	void mainInputLoop();
+	boolean mainInputLoop();
 	boolean isDisturbed(short x, short y);
 	void discover(short x, short y);
 	short randValidDirectionFrom(creature *monst, short x, short y, boolean respectAvoidancePreferences);
@@ -2534,12 +2536,12 @@ extern "C" {
 	void resetScentTurnNumber();
 	void displayMonsterFlashes(boolean flashingEnabled);
 	void displayMessageArchive();
-	void temporaryMessage(char *msg1, boolean requireAcknowledgment);
+	boolean temporaryMessage(char *msg1, boolean requireAcknowledgment);
 	void messageWithColor(char *msg, color *theColor, boolean requireAcknowledgment);
 	void flavorMessage(char *msg);
 	void message(const char *msg, boolean requireAcknowledgment);
     void displayMoreSignWithoutWaitingForAcknowledgment();
-	void displayMoreSign();
+	boolean displayMoreSign();
 	short encodeMessageColor(char *msg, short i, const color *theColor);
 	short decodeMessageColor(const char *msg, short i, color *returnColor);
 	color *messageColorFromVictim(creature *monst);
@@ -2790,7 +2792,7 @@ extern "C" {
 	void fillBufferFromFile();
 	void recordEvent(rogueEvent *event);
 	void recallEvent(rogueEvent *event);
-	void pausePlayback();
+	boolean pausePlayback();
 	void displayAnnotation();
 	void loadSavedGame();
 	void recordKeystroke(uchar keystroke, boolean controlKey, boolean shiftKey);
@@ -2798,7 +2800,7 @@ extern "C" {
 	void recordMouseClick(short x, short y, boolean controlKey, boolean shiftKey);
 	void OOSCheck(unsigned long x, short numberOfBytes);
 	void RNGCheck();
-	void executePlaybackInput(rogueEvent *recordingInput);
+	boolean executePlaybackInput(rogueEvent *recordingInput);
 	void getAvailableFilePath(char *filePath, const char *defaultPath, const char *suffix);
 	void saveGame();
 	void saveRecording();
@@ -2807,9 +2809,9 @@ extern "C" {
 	
 	void checkForDungeonErrors();
 	
-	boolean dialogChooseFile(char *path, const char *suffix, const char *prompt);
+	int dialogChooseFile(char *path, const char *suffix, const char *prompt);
 	void dialogAlert(char *message);
-	void mainBrogueJunction();
+	boolean mainBrogueJunction();
 	
 	void initializeButton(brogueButton *button);
 	void drawButtonsInState(buttonState *state);

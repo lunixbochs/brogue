@@ -342,23 +342,25 @@ void initializeMenuButtons(buttonState *state, brogueButton buttons[5]) {
 }
 
 // This is basically the main loop for the game.
-void mainInputLoop() {
-	short originLoc[2], pathDestination[2], oldTargetLoc[2],
-	path[1000][2], steps, oldRNG, dir, newX, newY;
-	creature *monst;
-	item *theItem;
-	cellDisplayBuffer rbuf[COLS][ROWS];
+boolean mainInputLoop() {
+	static short originLoc[2], pathDestination[2], oldTargetLoc[2],
+		path[1000][2], steps, oldRNG, dir, newX, newY;
+	static creature *monst;
+	static item *theItem;
+	static cellDisplayBuffer rbuf[COLS][ROWS];
 	
-	boolean canceled, targetConfirmed, tabKey, focusedOnMonster, focusedOnItem, focusedOnTerrain,
-	playingBack, doEvent, textDisplayed, cursorMode, justDisabledCursorMode;
+	static boolean canceled, targetConfirmed, tabKey, focusedOnMonster, focusedOnItem, focusedOnTerrain,
+		playingBack, doEvent, textDisplayed, cursorMode, justDisabledCursorMode;
 	
-	rogueEvent theEvent;
-	short **costMap;
-	brogueButton buttons[5] = {{{0}}};
-	buttonState state;
-	short buttonInput;
+	static rogueEvent theEvent;
+	static short **costMap;
+	static brogueButton buttons[5] = {{{0}}};
+	static buttonState state;
+	static short buttonInput;
 	
-	short *cursor = rogue.cursorLoc; // shorthand
+	static short *cursor;
+	crBegin;
+	cursor = rogue.cursorLoc; // shorthand
 	
 	canceled = false;
 	justDisabledCursorMode = false;
@@ -559,6 +561,7 @@ void mainInputLoop() {
 					targetConfirmed = true;
 					doEvent = false;
 				}
+			crReturn(false);
 		} while (!targetConfirmed && !canceled && !doEvent && !rogue.gameHasEnded);
 		
 		if (coordinatesAreInMap(oldTargetLoc[0], oldTargetLoc[1])) {
@@ -649,11 +652,14 @@ void mainInputLoop() {
 				}
 			}
 		}
+		crReturn(false);
 	}
 	
 	rogue.playbackMode = playingBack;
 	refreshSideBar(-1, -1, false);
 	freeGrid(costMap);
+	crFinish;
+	return true;
 }
 
 // accuracy depends on how many clock cycles occur per second
@@ -1338,6 +1344,7 @@ void irisFadeBetweenBuffers(cellDisplayBuffer fromBuf[COLS][ROWS],
         }
     }
     
+    // FIXME: EMSCRIPTEN: this might block
     do {
         percentBasis = 10000 * frame / frameCount;
         
@@ -1964,10 +1971,11 @@ void displayChokeMap() {
 	displayLevel();
 }
 
-void displayLoops() {
+boolean displayLoops() {
 	short i, j;
 	color foreColor, backColor;
 	uchar dchar;
+	crBegin;
 	
 	for (i=0; i<DCOLS; i++) {
 		for (j=0; j<DROWS; j++) {
@@ -1984,7 +1992,9 @@ void displayLoops() {
 			}
 		}
 	}
-	waitForAcknowledgment();
+	crWait(waitForAcknowledgment(), false);
+	crFinish;
+	return true;
 }
 
 boolean pauseBrogue(short milliseconds) {
@@ -2001,10 +2011,11 @@ boolean pauseBrogue(short milliseconds) {
 	return interrupted;
 }
 
-void nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance, boolean realInputEvenInPlayback) {
-	rogueEvent recordingInput;
-	boolean repeatAgain;
-	short pauseDuration;
+boolean nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance, boolean realInputEvenInPlayback) {
+	static rogueEvent recordingInput;
+	static boolean repeatAgain;
+	static short pauseDuration;
+	crBegin;
 	
 	returnEvent->eventType = EVENT_ERROR;
 	
@@ -2022,6 +2033,7 @@ void nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsD
 					repeatAgain = true;
 				}
 			}
+			crReturn(false);
 		} while ((rogue.playbackPaused || repeatAgain || rogue.playbackOOS) && !rogue.gameHasEnded);
 		rogue.playbackDelayThisTurn = rogue.playbackDelayPerTurn;
 		recallEvent(returnEvent);
@@ -2031,7 +2043,8 @@ void nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsD
 			displayMonsterFlashes(true);
 		}
 		do {
-			nextKeyOrMouseEvent(returnEvent, textInput, colorsDance); // No mouse clicks outside of the window will register.
+			crWait(nextKeyOrMouseEvent(returnEvent, textInput, colorsDance), false); // No mouse clicks outside of the window will register.
+			crReturn(false);
 		} while (returnEvent->eventType == MOUSE_UP && !coordinatesAreInWindow(returnEvent->param1, returnEvent->param2));
 		// recording done elsewhere
 	}
@@ -2042,11 +2055,14 @@ void nextBrogueEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsD
 		rogue.playbackPaused = rogue.playbackMode; // pause if replaying
 		message("Event error!", true);
 	}
+	crFinish;
+	return true;
 }
 
-void executeMouseClick(rogueEvent *theEvent) {
-	short x, y;
-	boolean autoConfirm;
+boolean executeMouseClick(rogueEvent *theEvent) {
+	static short x, y;
+	static boolean autoConfirm;
+	crBegin;
 	x = theEvent->param1;
 	y = theEvent->param2;
 	autoConfirm = theEvent->controlKey;
@@ -2059,13 +2075,18 @@ void executeMouseClick(rogueEvent *theEvent) {
 		} else {
 			rogue.cursorLoc[0] = windowToMapX(x);
 			rogue.cursorLoc[1] = windowToMapY(y);
-			mainInputLoop();
+			// reentrant?
+			fprintf(stderr, "executeMouseClick is probably broken\n");
+			crWait(mainInputLoop(), false);
+			return true; // whatever
 		}
 		
 	} else if (windowToMapX(x) >= 0 && windowToMapX(x) < DCOLS && y >= 0 && y < MESSAGE_LINES) {
 		// If the click location is in the message block, display the message archive.
 		displayMessageArchive();
 	}
+	crFinish;
+	return true;
 }
 
 void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKey) {
@@ -2311,13 +2332,14 @@ void executeKeystroke(signed long keystroke, boolean controlKey, boolean shiftKe
 	rogue.cautiousMode = false;
 }
 
-boolean getInputTextString(char *inputText,
+int getInputTextString(char *inputText,
 						   const char *prompt,
 						   short maxLength,
 						   const char *defaultEntry,
 						   const char *promptSuffix,
 						   short textEntryType,
 						   boolean useDialogBox) {
+	crBegin;
 	short charNum, i, x, y;
 	char keystroke, suffix[100];
 	const short textEntryBounds[TEXT_INPUT_TYPES][2] = {{' ', '~'}, {'0', '9'}};
@@ -2378,6 +2400,7 @@ boolean getInputTextString(char *inputText,
 				charNum++;
 			}
 		}
+		crReturn(3);
 	} while (keystroke != RETURN_KEY && keystroke != ESCAPE_KEY && keystroke != ENTER_KEY);
 	
 	if (useDialogBox) {
@@ -2391,6 +2414,7 @@ boolean getInputTextString(char *inputText,
 	}
 	strcat(displayedMessage[0], inputText);
 	strcat(displayedMessage[0], suffix);
+	crFinish;
 	return true;
 }
 
@@ -2459,11 +2483,12 @@ void flashTemporaryAlert(char *message, int time) {
 	flashMessage(message, (COLS - strLenWithoutEscapes(message)) / 2, ROWS / 2, time, &teal, &black);
 }
 
-void waitForAcknowledgment() {
+boolean waitForAcknowledgment() {
 	rogueEvent theEvent;
+	crBegin;
 	
 	if (rogue.autoPlayingLevel || (rogue.playbackMode && !rogue.playbackOOS)) {
-		return;
+		return true;
 	}
 	
 	do {
@@ -2471,15 +2496,22 @@ void waitForAcknowledgment() {
 		if (theEvent.eventType == KEYSTROKE && theEvent.param1 != ACKNOWLEDGE_KEY && theEvent.param1 != ESCAPE_KEY) {
 			flashTemporaryAlert(" -- Press space or click to continue -- ", 500);
 		}
+		crReturn(false);
 	} while (!(theEvent.eventType == KEYSTROKE && (theEvent.param1 == ACKNOWLEDGE_KEY || theEvent.param1 == ESCAPE_KEY)
 			   || theEvent.eventType == MOUSE_UP));
+	crFinish;
+	return true;
 }
 
-void waitForKeystrokeOrMouseClick() {
+boolean waitForKeystrokeOrMouseClick() {
 	rogueEvent theEvent;
+	crBegin;
 	do {
 		nextBrogueEvent(&theEvent, false, false, false);
+		crReturn(false);
 	} while (theEvent.eventType != KEYSTROKE && theEvent.eventType != MOUSE_UP);
+	crFinish;
+	return true;
 }
 
 boolean confirm(char *prompt, boolean alsoDuringPlayback) {
@@ -2631,9 +2663,10 @@ void displayMessageArchive() {
 // Clears the message area and prints the given message in the area.
 // It will disappear when messages are refreshed and will not be archived.
 // This is primarily used to display prompts.
-void temporaryMessage(char *msg, boolean requireAcknowledgment) {
+boolean temporaryMessage(char *msg, boolean requireAcknowledgment) {
 	char message[COLS];
 	short i, j;
+	crBegin;
 	
 	assureCosmeticRNG;
 	strcpy(message, msg);
@@ -2651,10 +2684,12 @@ void temporaryMessage(char *msg, boolean requireAcknowledgment) {
 	}
 	printString(message, mapToWindowX(0), mapToWindowY(-1), &white, &black, 0);
 	if (requireAcknowledgment) {
-		waitForAcknowledgment();
+		crWait(waitForAcknowledgment(), false);
 		updateMessageDisplay();
 	}
 	restoreRNG;
+	crFinish;
+	return true;
 }
 
 void messageWithColor(char *msg, color *theColor, boolean requireAcknowledgment) {
@@ -2769,24 +2804,27 @@ void displayMoreSignWithoutWaitingForAcknowledgment() {
 	}
 }
 
-void displayMoreSign() {
+boolean displayMoreSign() {
 	short i;
+	crBegin;
 	
 	if (rogue.autoPlayingLevel) {
-		return;
+		return true;
 	}
 	
 	if (strLenWithoutEscapes(displayedMessage[0]) < DCOLS - 8 || messageConfirmed[0]) {
 		printString("--MORE--", COLS - 8, MESSAGE_LINES-1, &black, &white, 0);
-		waitForAcknowledgment();
+		crWait(waitForAcknowledgment(), false);
 		printString("        ", COLS - 8, MESSAGE_LINES-1, &black, &black, 0);
 	} else {
 		printString("--MORE--", COLS - 8, MESSAGE_LINES, &black, &white, 0);
-		waitForAcknowledgment();
+		crWait(waitForAcknowledgment(), false);
 		for (i=1; i<=8; i++) {
 			refreshDungeonCell(DCOLS - i, 0);
 		}
 	}
+	crFinish;
+	return true;
 }
 
 // Inserts a four-character color escape sequence into a string at the insertion point.
@@ -3298,19 +3336,23 @@ short printStringWithWrapping(char *theString, short x, short y, short width, co
 	return py;
 }
 
-char nextKeyPress(boolean textInput) {
-	rogueEvent theEvent;
+int nextKeyPress(boolean textInput) {
+	static rogueEvent theEvent;
+	crBegin;
 	do {
 		nextBrogueEvent(&theEvent, textInput, false, false);
+		crReturn(-1);
 	} while (theEvent.eventType != KEYSTROKE);
+	crFinish;
 	return theEvent.param1;
 }
 
 #define BROGUE_HELP_LINE_COUNT	32
 
-void printHelpScreen() {
+boolean printHelpScreen() {
+	crBegin;
 	short i, j;
-	cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
+	static cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
 	char helpText[BROGUE_HELP_LINE_COUNT][DCOLS*3] = {
 		"",
 		"",
@@ -3372,10 +3414,12 @@ void printHelpScreen() {
 	
 	// Display.
 	overlayDisplayBuffer(dbuf, rbuf);
-	waitForAcknowledgment();
+	crWait(waitForAcknowledgment(), false);
 	overlayDisplayBuffer(rbuf, 0);
 	updateFlavorText();
 	updateMessageDisplay();
+	crFinish;
+	return true;
 }
 
 void printDiscoveries(short category, short count, unsigned short itemCharacter, short x, short y, cellDisplayBuffer dbuf[COLS][ROWS]) {
@@ -3421,9 +3465,10 @@ void printDiscoveries(short category, short count, unsigned short itemCharacter,
 	}
 }
 
-void printDiscoveriesScreen() {
+boolean printDiscoveriesScreen() {
 	short i, j, y;
-	cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
+	static cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
+	crBegin;
 	
 	clearDisplayBuffer(dbuf);
 	
@@ -3451,9 +3496,10 @@ void printDiscoveriesScreen() {
 	}
 	overlayDisplayBuffer(dbuf, rbuf);
     
-    waitForKeystrokeOrMouseClick();
+	crWait(waitForKeystrokeOrMouseClick(), false);
 	
 	overlayDisplayBuffer(rbuf, NULL);
+	crFinish;
 }
 
 // Creates buttons for the discoveries screen in the buttons pointer; returns the number of buttons created.
@@ -3540,7 +3586,8 @@ void printDiscoveriesScreen() {
 //	overlayDisplayBuffer(rbuf, NULL);
 //}
 
-void printHighScores(boolean hiliteMostRecent) {
+boolean printHighScores(boolean hiliteMostRecent) {
+	crBegin;
 	short i, hiliteLineNum, maxLength = 0, leftOffset;
 	rogueHighScoresEntry list[HIGH_SCORES_COUNT] = {{0}};
 	char buf[DCOLS*3];
@@ -3598,7 +3645,9 @@ void printHighScores(boolean hiliteMostRecent) {
 	printString("Press space to continue.", (COLS - strLenWithoutEscapes("Press space to continue.")) / 2, ROWS - 1, &scoreColor, &black, 0);
 	
 	commitDraws();
-	waitForAcknowledgment();
+	crWait(waitForAcknowledgment(), false);
+	crFinish;
+	return true;
 }
 
 void displayGrid(short **map) {
@@ -4237,8 +4286,9 @@ unsigned long printCarriedItemDetails(item *theItem,
 									  short x, short y, short width,
 									  boolean includeButtons,
 									  cellDisplayBuffer rbuf[COLS][ROWS]) {
+	crBegin;
 	char textBuf[COLS * 100], goldColorEscape[5] = "", whiteColorEscape[5] = "";
-	brogueButton buttons[20] = {{{0}}};
+	static brogueButton buttons[20] = {{{0}}};
 	short b;
 	
 	itemDetails(textBuf, theItem);
@@ -4300,7 +4350,7 @@ unsigned long printCarriedItemDetails(item *theItem,
 	b = printTextBox(textBuf, x, y, width, &white, &interfaceBoxColor, rbuf, buttons, b);
 	
 	if (!includeButtons) {
-		waitForKeystrokeOrMouseClick();
+		crWait(waitForKeystrokeOrMouseClick(), -2);
 		return -1;
 	}
 	
@@ -4309,6 +4359,7 @@ unsigned long printCarriedItemDetails(item *theItem,
 	} else {
 		return -1;
 	}
+	crFinish;
 }
 
 // Returns true if an action was taken.

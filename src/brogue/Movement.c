@@ -1869,10 +1869,11 @@ void travelMap(short **distanceMap) {
 	updateFlavorText();
 }
 
-void travel(short x, short y, boolean autoConfirm) {
-	short **distanceMap, i;
-	rogueEvent theEvent;
-	unsigned short staircaseConfirmKey;
+boolean travel(short x, short y, boolean autoConfirm) {
+	static short **distanceMap, i;
+	static rogueEvent theEvent;
+	static unsigned short staircaseConfirmKey;
+	crBegin;
 	
 	confirmMessages();
     
@@ -1885,7 +1886,7 @@ void travel(short x, short y, boolean autoConfirm) {
 		pmap[x][y].flags |= HAS_PLAYER;
 		refreshDungeonCell(x, y);
 		updateVision(true);
-		return;
+		return true;
 	}
 	
 	if (abs(player.xLoc - x) + abs(player.yLoc - y) == 1) {
@@ -1896,12 +1897,12 @@ void travel(short x, short y, boolean autoConfirm) {
 				break;
 			}
 		}
-		return;
+		return true;
 	}
 	
 	if (!(pmap[x][y].flags & (DISCOVERED | MAGIC_MAPPED))) {
 		message("You have not explored that location.", false);
-		return;
+		return true;
 	}
 	
 	distanceMap = allocGrid();
@@ -1939,7 +1940,7 @@ void travel(short x, short y, boolean autoConfirm) {
 				//refreshSideBar(-1, -1, false);
 				commitDraws();
 			} else if (theEvent.eventType == MOUSE_UP) {
-				executeMouseClick(&theEvent);
+				crWait(executeMouseClick(&theEvent), false);
 			}
 		}
 //		if (player.xLoc == x && player.yLoc == y) {
@@ -1953,6 +1954,8 @@ void travel(short x, short y, boolean autoConfirm) {
 		message("No path is available.", false);
 	}
 	freeGrid(distanceMap);
+	crFinish;
+	return true;
 }
 
 void populateGenericCostMap(short **costMap) {

@@ -356,8 +356,9 @@ static boolean tcod_pauseForMilliseconds(short milliseconds)
 
 #define PAUSE_BETWEEN_EVENT_POLLING		36//17
 
-static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance)
+static boolean tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance)
 {
+	crBegin;
 	boolean tryAgain;
 	TCOD_key_t key;
 	TCOD_mouse_t mouse;
@@ -378,7 +379,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			rogue.nextGame = NG_QUIT; // causes the menu to drop out immediately
 			returnEvent->eventType = KEYSTROKE;
 			returnEvent->param1 = ESCAPE_KEY;
-			return;
+			return true;
 		}
 		
 		tryAgain = false;
@@ -387,7 +388,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			rewriteKey(&bufferedKey, textInput);
 			if (processKeystroke(bufferedKey, returnEvent, textInput)) {
 				bufferedKey.vk = TCODK_NONE;
-				return;
+				return true;
 			} else {
 				bufferedKey.vk = TCODK_NONE;
 			}
@@ -406,7 +407,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			}
 			
 			missedMouse.lmb = missedMouse.lmb == MOUSE_DOWN ? MOUSE_UP : 0;
-			return;
+			return true;
 		}
 
 		if (missedMouse.rmb) {
@@ -422,7 +423,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			}
 			
 			missedMouse.rmb = missedMouse.rmb == MOUSE_DOWN ? MOUSE_UP : 0;
-			return;
+			return true;
 		}
 		
 		if (!(serverMode || (SDL_GetAppState() & SDL_APPACTIVE))) {
@@ -443,7 +444,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 
 		rewriteKey(&key, textInput);
 		if (processKeystroke(key, returnEvent, textInput)) {
-			return;
+			return true;
 		}
 
 		mouse = TCOD_mouse_get_status();
@@ -504,7 +505,7 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			if (returnEvent->eventType == MOUSE_ENTERED_CELL && !hasMouseMoved) {
 				hasMouseMoved = true;
 			} else {
-				return;
+				return true;
 			}
 		}
 
@@ -513,7 +514,10 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 		if (waitTime > 0 && waitTime <= PAUSE_BETWEEN_EVENT_POLLING) {
 			TCOD_sys_sleep_milli(waitTime);
 		}
+		crReturn(false);
 	}
+	crFinish;
+	return true;
 }
 
 

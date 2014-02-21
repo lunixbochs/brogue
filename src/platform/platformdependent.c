@@ -62,12 +62,12 @@ boolean controlKeyIsDown() {
 	return currentConsole.modifierHeld(1);
 }
 
-void nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
-	currentConsole.nextKeyOrMouseEvent(returnEvent, textInput, colorsDance);
+boolean nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput, boolean colorsDance) {
+	return currentConsole.nextKeyOrMouseEvent(returnEvent, textInput, colorsDance);
 }
 
 boolean pauseForMilliseconds(short milliseconds) {
-	return currentConsole.pauseForMilliseconds(milliseconds);
+	// return currentConsole.pauseForMilliseconds(milliseconds);
 }
 
 // creates an empty high scores file

@@ -259,6 +259,7 @@ void initializeMenuFlames(boolean includeTitle,
 }
 
 void titleMenu() {
+	crBegin;
 	signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3]; // red, green and blue
 	signed short colorSources[MENU_FLAME_COLOR_SOURCE_COUNT][4]; // red, green, blue, and rand, one for each color source (no more than MENU_FLAME_COLOR_SOURCE_COUNT).
 	color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)];
@@ -372,11 +373,13 @@ void titleMenu() {
 		// Revert the display.
 		overlayDisplayBuffer(state.rbuf, NULL);
 		
+		crReturn();
 	} while (button == -1 && rogue.nextGame == NG_NOTHING);
 	drawMenuFlames(flames, mask);
 	if (button != -1) {
 		rogue.nextGame = buttonCommands[button];
 	}
+	crFinish;
 }
 
 void dialogAlert(char *message) {
@@ -404,14 +407,15 @@ boolean stringsExactlyMatch(const char *string1, const char *string2) {
 
 #define FILES_ON_PAGE_MAX				(min(26, ROWS - 7)) // Two rows (top and bottom) for flames, two rows for border, one for prompt, one for heading.
 #define MAX_FILENAME_DISPLAY_LENGTH		53
-boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
-	short i, j, count, x, y, width, height, suffixLength, pathLength, maxPathLength, currentPageStart;
-	brogueButton buttons[FILES_ON_PAGE_MAX + 2];
-	fileEntry *files;
-	boolean retval = false, again;
-	cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
-	color *dialogColor = &interfaceBoxColor;
-	char *membuf;
+int dialogChooseFile(char *path, const char *suffix, const char *prompt) {
+	static short i, j, count, x, y, width, height, suffixLength, pathLength, maxPathLength, currentPageStart;
+	static brogueButton buttons[FILES_ON_PAGE_MAX + 2];
+	static fileEntry *files;
+	static boolean retval = false, again;
+	static cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
+	static color *dialogColor = &interfaceBoxColor;
+	static char *membuf;
+	crBegin;
 	
 	suffixLength = strlen(suffix);
 	files = listFiles(&count, &membuf);
@@ -553,6 +557,7 @@ boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
 			}
 		}
 		
+		crReturn(3);
 	} while (again);
 	
 	free(files);
@@ -564,6 +569,7 @@ boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
 	} else {
 		return retval;
 	}
+	crFinish;
 }
 
 void scum(unsigned long startingSeed, short numberOfSeedsToScan, short scanThroughDepth) {
@@ -626,12 +632,13 @@ the first %i depths will, of course, make the game significantly easier.",
 // accompanying path, and it's a command that should take a path, then pop up a dialog to have
 // the player specify a path. If there is no command (i.e. if rogue.nextGame contains NG_NOTHING),
 // then we'll display the title screen so the player can choose.
-void mainBrogueJunction() {
-	rogueEvent theEvent;
-	char path[BROGUE_FILENAME_MAX], buf[100], seedDefault[100];
-	char maxSeed[20];
-	short i, j, k;
-	boolean seedTooBig;
+boolean mainBrogueJunction() {
+	static rogueEvent theEvent;
+	static char path[BROGUE_FILENAME_MAX], buf[100], seedDefault[100];
+	static char maxSeed[20];
+	static short i, j, k;
+	static boolean seedTooBig;
+	crBegin;
 	
 	// clear screen and display buffer
 	for (i=0; i<COLS; i++) {
@@ -716,8 +723,8 @@ void mainBrogueJunction() {
 				rogue.nextGame = NG_NOTHING;
 				initializeRogue(rogue.nextGameSeed);
 				startLevel(rogue.depthLevel, 1); // descending into level 1
-				
-				mainInputLoop();
+
+				crWait(mainInputLoop(), false);
 				freeEverything();
 				break;
 			case NG_OPEN_GAME:
@@ -727,13 +734,15 @@ void mainBrogueJunction() {
 					strcpy(path, rogue.nextGamePath);
 					rogue.nextGamePath[0] = '\0';
 				} else {
-					dialogChooseFile(path, GAME_SUFFIX, "Open saved game:");
+					while (dialogChooseFile(path, GAME_SUFFIX, "Open saved game:") == 3) {
+						crReturn(false);
+					}
 					//chooseFile(path, "Open saved game: ", "Saved game", GAME_SUFFIX);
 				}
 					
 				if (openFile(path)) {
 					loadSavedGame();
-					mainInputLoop();
+					crWait(mainInputLoop(), false);
 					freeEverything();
 				} else {
 					//dialogAlert("File not found.");
@@ -750,7 +759,9 @@ void mainBrogueJunction() {
 					strcpy(path, rogue.nextGamePath);
 					rogue.nextGamePath[0] = '\0';
 				} else {
-					dialogChooseFile(path, RECORDING_SUFFIX, "View recording:");
+					while (dialogChooseFile(path, RECORDING_SUFFIX, "View recording:") == 3) {
+						crReturn(false);
+					}
 					//chooseFile(path, "View recording: ", "Recording", RECORDING_SUFFIX);
 				}
 				
@@ -760,14 +771,16 @@ void mainBrogueJunction() {
 					initializeRogue(0); // Seed argument is ignored because we're in playback.
 					if (!rogue.gameHasEnded) {
 						startLevel(rogue.depthLevel, 1);
-						pausePlayback();
+						crWait(pausePlayback(), false);
 						displayAnnotation(); // in case there's an annotation for turn 0
 					}
 					
 					while(!rogue.gameHasEnded && rogue.playbackMode) {
 						rogue.RNG = RNG_COSMETIC; // dancing terrain colors can't influence recordings
 						rogue.playbackBetweenTurns = true;
-						nextBrogueEvent(&theEvent, false, true, false);
+						while (! nextBrogueEvent(&theEvent, false, true, false)) {
+							crReturn(false);
+						}
 						rogue.RNG = RNG_SUBSTANTIVE;
 						
 						executeEvent(&theEvent);
@@ -783,7 +796,7 @@ void mainBrogueJunction() {
 				break;
 			case NG_HIGH_SCORES:
 				rogue.nextGame = NG_NOTHING;
-				printHighScores(false);
+				crWait(printHighScores(false), false);
 				break;
             case NG_SCUM:
                 rogue.nextGame = NG_NOTHING;
@@ -795,6 +808,9 @@ void mainBrogueJunction() {
 			default:
 				break;
 		}
+		crReturn(false);
 	} while (rogue.nextGame != NG_QUIT);
+	crFinish;
+	return true;
 }
 

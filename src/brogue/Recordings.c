@@ -291,7 +291,8 @@ simply be the result of a bug.  (The recording feature is still in beta for this
 If this is a different computer from the one on which the recording was saved, the recording \
 might succeed on the original computer."
 
-void playbackPanic() {
+boolean playbackPanic() {
+	crBegin;
 	cellDisplayBuffer rbuf[COLS][ROWS];
 	
 	if (!rogue.playbackOOS) {
@@ -317,8 +318,13 @@ void playbackPanic() {
 		
 		overlayDisplayBuffer(rbuf, 0);
 		
-		mainInputLoop();
+		// TODO: EMSCRIPTEN: do I need to do anything real here, or is any keystroke good enough?
+		crWait(waitForKeystrokeOrMouseClick(), false);
+		// TODO: EMSCRIPTEN: would this recurse mainInputLoop?
+		// crWait(mainInputLoop(), false);
 	}
+	crFinish;
+	return true;
 }
 
 void recallEvent(rogueEvent *event) {
@@ -559,9 +565,10 @@ boolean unpause() {
 
 #define PLAYBACK_HELP_LINE_COUNT	19
 
-void printPlaybackHelpScreen() {
+boolean printPlaybackHelpScreen() {
+	crBegin;
 	short i, j;
-	cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
+	static cellDisplayBuffer dbuf[COLS][ROWS], rbuf[COLS][ROWS];
 	char helpText[PLAYBACK_HELP_LINE_COUNT][80] = {
 		"Commands:",
 		"",
@@ -607,9 +614,11 @@ void printPlaybackHelpScreen() {
 	overlayDisplayBuffer(dbuf, rbuf);
 	
 	rogue.playbackMode = false;
-	waitForAcknowledgment();
+	crWait(waitForAcknowledgment(), false);
 	rogue.playbackMode = true;
 	overlayDisplayBuffer(rbuf, NULL);
+	crFinish;
+	return true;
 }
 
 void advanceToLocation(unsigned long destinationFrame) {
@@ -699,31 +708,37 @@ void promptToAdvanceToLocation(short keystroke) {
 	}
 }
 
-void pausePlayback() {
+boolean pausePlayback() {
+	crBegin;
 	if (!rogue.playbackPaused) {
 		rogue.playbackPaused = true;
 		messageWithColor("recording paused. Press space to play.", &teal, false);
 		refreshSideBar(-1, -1, false);
-		mainInputLoop();
+		// TODO: EMSCRIPTEN: do I need to do anything real here, or is any keystroke good enough?
+		crWait(waitForKeystrokeOrMouseClick(), false);
+		// mainInputLoop();
 		
 		messageWithColor("recording unpaused.", &teal, false);
 		rogue.playbackPaused = false;
 		refreshSideBar(-1, -1, false);
 		rogue.playbackDelayThisTurn = DEFAULT_PLAYBACK_DELAY;
 	}
+	crFinish;
+	return true;
 }
 
 // Used to interact with playback -- e.g. changing speed, pausing.
-void executePlaybackInput(rogueEvent *recordingInput) {
-	uchar key;
-	short newDelay, frameCount, x, y, previousDeepestLevel;
-	unsigned long destinationFrame;
-	boolean pauseState, proceed;
-	rogueEvent theEvent;
-	char path[BROGUE_FILENAME_MAX];
+boolean executePlaybackInput(rogueEvent *recordingInput) {
+	static uchar key;
+	static short newDelay, frameCount, x, y, previousDeepestLevel;
+	static unsigned long destinationFrame;
+	static boolean pauseState, proceed;
+	static rogueEvent theEvent;
+	static char path[BROGUE_FILENAME_MAX];
+	crBegin;
 	
 	if (!rogue.playbackMode) {
-		return;
+		return true;
 	}
 	
 	if (recordingInput->eventType == KEYSTROKE) {
@@ -750,7 +765,7 @@ void executePlaybackInput(rogueEvent *recordingInput) {
 				if (rogue.playbackOOS && rogue.playbackPaused) {
 					flashTemporaryAlert(" Out of sync ", 2000);
 				} else {
-					pausePlayback();
+					crWait(pausePlayback(), false);
 				}
 				break;
 			case TAB_KEY:
@@ -941,6 +956,8 @@ void executePlaybackInput(rogueEvent *recordingInput) {
 		displayInventory(ALL_ITEMS, 0, 0, true, false);
 		rogue.playbackMode = true;
 	}
+	crFinish;
+	return true;
 }
 
 // Pass in defaultPath (the file name WITHOUT suffix), and the suffix.

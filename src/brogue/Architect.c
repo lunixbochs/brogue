@@ -98,21 +98,43 @@ boolean checkLoopiness(short x, short y) {
 	}
 }
 
+typedef struct _audit_t {
+	short x, y;
+	struct _audit_t *next;
+} audit_t;
+
 void auditLoop(short x, short y, char grid[DCOLS][DROWS]) {
-	short dir, newX, newY;
-	if (coordinatesAreInMap(x, y)
-		&& !grid[x][y]
-		&& !(pmap[x][y].flags & IN_LOOP)) {
-		
-		grid[x][y] = true;
-		for (dir = 0; dir < 8; dir++) {
-			newX = x + nbDirs[dir][0];
-			newY = y + nbDirs[dir][1];
-			if (coordinatesAreInMap(newX, newY)) {
-				auditLoop(newX, newY, grid);
+	short newX, newY;
+	audit_t *first, *cur, *todo;
+	first = malloc(sizeof(audit_t));
+	first->x = x;
+	first->y = y;
+	todo = first;
+	do {
+		x = todo->x;
+		y = todo->y;
+		if (coordinatesAreInMap(x, y)
+			&& !grid[x][y]
+			&& !(pmap[x][y].flags & IN_LOOP)) {
+
+			grid[x][y] = true;
+			for (short dir = 0; dir < 8; dir++) {
+				newX = x + nbDirs[dir][0];
+				newY = y + nbDirs[dir][1];
+				if (coordinatesAreInMap(newX, newY)) {
+					cur = malloc(sizeof(audit_t));
+					cur->x = newX;
+					cur->y = newY;
+					todo->next = cur;
+				}
 			}
 		}
-	}
+	} while ((todo = todo->next));
+	cur = first;
+	do {
+		todo = cur->next;
+		free(cur);
+	} while ((cur = todo));
 }
 
 // Assumes it is called with respect to a passable (startX, startY), and that the same is not already included in results.
@@ -518,7 +540,7 @@ void addMachineNumberToKey(item *theItem, short machineNumber, boolean disposabl
 void expandMachineInterior(char interior[DCOLS][DROWS], short minimumInteriorNeighbors) {
     boolean madeChange;
     short nbcount, newX, newY, i, j, layer;
-    enum directions dir;
+    short dir;
     
     do {
         madeChange = false;

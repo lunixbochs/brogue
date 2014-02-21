@@ -26,10 +26,14 @@
 #include <math.h>
 #include <time.h>
 
+void brogueTick() {
+	mainBrogueJunction();
+}
+
 void rogueMain() {
 	previousGameSeed = 0;
 	initializeBrogueSaveLocation();
-	mainBrogueJunction();
+	emscripten_set_main_loop(brogueTick, 30, 1);
 }
 
 void executeEvent(rogueEvent *theEvent) {
@@ -1007,7 +1011,8 @@ void freeEverything() {
     }
 }
 
-void gameOver(char *killedBy, boolean useCustomPhrasing) {
+boolean gameOver(char *killedBy, boolean useCustomPhrasing) {
+	crBegin;
 	char buf[COLS];
 	rogueHighScoresEntry theEntry;
 	cellDisplayBuffer dbuf[COLS][ROWS];
@@ -1052,6 +1057,7 @@ void gameOver(char *killedBy, boolean useCustomPhrasing) {
                 }
                 displayInventory(ALL_ITEMS, 0, 0, true, false);
             }
+	    crReturn(false);
         } while (!(theEvent.eventType == KEYSTROKE && (theEvent.param1 == ACKNOWLEDGE_KEY || theEvent.param1 == ESCAPE_KEY)
                    || theEvent.eventType == MOUSE_UP));
         
@@ -1069,11 +1075,11 @@ void gameOver(char *killedBy, boolean useCustomPhrasing) {
 			player.status[STATUS_NUTRITION] = STOMACH_SIZE;
 		}
 		player.bookkeepingFlags &= ~MONST_IS_DYING;
-		return;
+		return true;
 	}
 	
 	if (rogue.highScoreSaved) {
-		return;
+		return true;
 	}
 	rogue.highScoreSaved = true;
 	
@@ -1105,16 +1111,19 @@ void gameOver(char *killedBy, boolean useCustomPhrasing) {
 	
 	if (!rogue.playbackMode) {
 		if (saveHighScore(theEntry)) {
-			printHighScores(true);
+			crWait(printHighScores(true), false);
 		}
 		blackOutScreen();
 		saveRecording();
 	}
 	
 	rogue.gameHasEnded = true;
+	crFinish;
+	return true;
 }
 
-void victory(boolean superVictory) {
+boolean victory(boolean superVictory) {
+	crBegin;
 	char buf[DCOLS*3], victoryVerb[20];
 	item *theItem;
 	short i, gemCount = 0;
@@ -1209,9 +1218,11 @@ void victory(boolean superVictory) {
 	
 	saveRecording();
 	
-	printHighScores(qualified);
+	crWait(printHighScores(qualified), false);
 	
 	rogue.gameHasEnded = true;
+	crFinish;
+	return true;
 }
 
 void enableEasyMode() {
