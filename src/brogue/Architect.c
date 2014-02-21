@@ -33,6 +33,19 @@ boolean cellHasTerrainFlag(short x, short y, unsigned long flagMask) {
 }
 #endif
 
+typedef struct _point_t {
+	short x, y;
+	struct _point_t *next;
+} point_t;
+
+static void free_point_array(point_t *cur) {
+        point_t *next;
+        do {
+                next = cur->next;
+                free(cur);
+        } while ((cur = next));
+}
+
 boolean checkLoopiness(short x, short y) {
 	boolean inString;
 	short newX, newY, dir, sdir;
@@ -98,17 +111,13 @@ boolean checkLoopiness(short x, short y) {
 	}
 }
 
-typedef struct _audit_t {
-	short x, y;
-	struct _audit_t *next;
-} audit_t;
-
 void auditLoop(short x, short y, char grid[DCOLS][DROWS]) {
 	short newX, newY;
-	audit_t *first, *cur, *todo;
-	first = malloc(sizeof(audit_t));
+	point_t *first, *cur, *todo;
+	first = malloc(sizeof(point_t));
 	first->x = x;
 	first->y = y;
+	first->next = NULL;
 	todo = first;
 	do {
 		x = todo->x;
@@ -122,19 +131,16 @@ void auditLoop(short x, short y, char grid[DCOLS][DROWS]) {
 				newX = x + nbDirs[dir][0];
 				newY = y + nbDirs[dir][1];
 				if (coordinatesAreInMap(newX, newY)) {
-					cur = malloc(sizeof(audit_t));
+					cur = malloc(sizeof(point_t));
 					cur->x = newX;
 					cur->y = newY;
+					cur->next = NULL;
 					todo->next = cur;
 				}
 			}
 		}
 	} while ((todo = todo->next));
-	cur = first;
-	do {
-		todo = cur->next;
-		free(cur);
-	} while ((cur = todo));
+	free_point_array(first);
 }
 
 // Assumes it is called with respect to a passable (startX, startY), and that the same is not already included in results.
@@ -2815,22 +2821,38 @@ short oppositeDirection(short theDir) {
 short connectCell(short x, short y, short zoneLabel, char blockingMap[DCOLS][DROWS], char zoneMap[DCOLS][DROWS]) {
 	enum directions dir;
 	short newX, newY, size;
-	
-	zoneMap[x][y] = zoneLabel;
+	point_t *first, *cur, *todo;
+	first = malloc(sizeof(point_t));
+	first->x = x;
+	first->y = y;
+	first->next = NULL;
+	todo = first;
+
 	size = 1;
-	
-	for (dir = 0; dir < 4; dir++) {
-		newX = x + nbDirs[dir][0];
-		newY = y + nbDirs[dir][1];
+	do {
+		x = todo->x;
+		y = todo->y;
+		zoneMap[x][y] = zoneLabel;
 		
-		if (coordinatesAreInMap(newX, newY)
-			&& zoneMap[newX][newY] == 0
-			&& (!blockingMap || !blockingMap[newX][newY])
-			&& cellIsPassableOrDoor(newX, newY)) {
+		for (dir = 0; dir < 4; dir++) {
+			newX = x + nbDirs[dir][0];
+			newY = y + nbDirs[dir][1];
 			
-			size += connectCell(newX, newY, zoneLabel, blockingMap, zoneMap);
+			if (coordinatesAreInMap(newX, newY)
+				&& zoneMap[newX][newY] == 0
+				&& (!blockingMap || !blockingMap[newX][newY])
+				&& cellIsPassableOrDoor(newX, newY)) {
+				
+				cur = malloc(sizeof(point_t));
+				cur->x = newX;
+				cur->y = newY;
+				cur->next = NULL;
+				todo->next = cur;
+				size += 1;
+			}
 		}
-	}
+	} while ((todo = todo->next));
+	free_point_array(first);
 	return size;
 }
 
