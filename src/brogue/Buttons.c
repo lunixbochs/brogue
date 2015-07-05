@@ -7,18 +7,18 @@
  *
  *  This file is part of Brogue.
  *
- *  Brogue is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
  *
- *  Brogue is distributed in the hope that it will be useful,
+ *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with Brogue.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "Rogue.h"
@@ -26,20 +26,29 @@
 #include <math.h>
 #include <time.h>
 
+// Draws the smooth gradient that appears on a button when you hover over or depress it.
+// Returns the percentage by which the current tile should be averaged toward a hilite color.
+short smoothHiliteGradient(const short currentXValue, const short maxXValue) {
+    return (short) (100 * sin(PI * currentXValue / (maxXValue)));
+}
+
 // Draws the button to the screen, or to a display buffer if one is given.
 // Button back color fades from -50% intensity at the edges to the back color in the middle.
 // Text is white, but can use color escapes.
 //		Hovering highlight augments fore and back colors with buttonHoverColor by 20%.
 //		Pressed darkens the middle color (or turns it the hover color if the button is black).
 void drawButton(brogueButton *button, enum buttonDrawStates highlight, cellDisplayBuffer dbuf[COLS][ROWS]) {
-	short i, textLoc, width, midPercent, symbolNumber, opacity;
+	short i, textLoc, width, midPercent, symbolNumber, opacity, oldRNG;
 	color fColor, bColor, fColorBase, bColorBase, bColorEdge, bColorMid;
 	uchar displayCharacter;
 	
 	if (!(button->flags & B_DRAW)) {
 		return;
 	}
-	
+    //assureCosmeticRNG;
+	oldRNG = rogue.RNG;
+    rogue.RNG = RNG_COSMETIC;
+    
 	symbolNumber = 0;
 	
 	width = strLenWithoutEscapes(button->text);
@@ -79,7 +88,7 @@ void drawButton(brogueButton *button, enum buttonDrawStates highlight, cellDispl
 		fColor = fColorBase;
 		
 		if (button->flags & B_GRADIENT) {
-			midPercent = (short) (100 * sin(PI * i / (width-1)));
+            midPercent = smoothHiliteGradient(i, width - 1);
 			bColor = bColorEdge;
 			applyColorAverage(&bColor, &bColorMid, midPercent);
 		}
@@ -109,10 +118,11 @@ void drawButton(brogueButton *button, enum buttonDrawStates highlight, cellDispl
 				plotCharToBuffer(displayCharacter, button->x + i, button->y, &fColor, &bColor, dbuf);
 				dbuf[button->x + i][button->y].opacity = opacity;
 			} else {
-				plotCharWithColor(displayCharacter, button->x + i, button->y, fColor, bColor);
+				plotCharWithColor(displayCharacter, button->x + i, button->y, &fColor, &bColor);
 			}
 		}
 	}
+    restoreRNG;
 }
 
 void initializeButton(brogueButton *button) {
@@ -332,7 +342,7 @@ short buttonInputLoop(brogueButton *buttons,
 //		for (j=0; j<COLS; j++) {
 //			if (i >= winX		&& i < winX + winWidth
 //				&& j >= winY	&& j < winY + winHeight) {
-//				plotCharWithColor(' ', i, j, white, gray);
+//				plotCharWithColor(' ', i, j, &white, &gray);
 //			}
 //		}
 //	}

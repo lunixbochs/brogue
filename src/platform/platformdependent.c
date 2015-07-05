@@ -235,8 +235,8 @@ short getHighScoresList(rogueHighScoresEntry returnList[HIGH_SCORES_COUNT]) {
 }
 
 boolean saveHighScore(rogueHighScoresEntry theEntry) {
-	short i, lowestScoreIndex;
-	long lowestScore;
+	short i, lowestScoreIndex = -1;
+	long lowestScore = -1;
 	
 	loadScoreBuffer();
 	
@@ -262,7 +262,7 @@ boolean saveHighScore(rogueHighScoresEntry theEntry) {
 
 // not needed in libtcod
 void initializeBrogueSaveLocation() {
-    
+	
 }
 
 // start of file listing

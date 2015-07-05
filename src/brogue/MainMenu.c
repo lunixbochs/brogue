@@ -7,18 +7,18 @@
  *
  *  This file is part of Brogue.
  *
- *  Brogue is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
  *
- *  Brogue is distributed in the hope that it will be useful,
+ *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with Brogue.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "Rogue.h"
@@ -58,7 +58,7 @@ void drawMenuFlames(signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3
             }
             
 			if (mask[i][j] == 100) {
-				plotCharWithColor(dchar, i, j, darkGray, *maskColor);
+				plotCharWithColor(dchar, i, j, &darkGray, maskColor);
 			} else {
 				tempColor = black;
 				tempColor.red	= flames[i][j][0] / MENU_FLAME_PRECISION_FACTOR;
@@ -67,13 +67,13 @@ void drawMenuFlames(signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3
 				if (mask[i][j] > 0) {
 					applyColorAverage(&tempColor, maskColor, mask[i][j]);
 				}
-				plotCharWithColor(dchar, i, j, darkGray, tempColor);
+				plotCharWithColor(dchar, i, j, &darkGray, &tempColor);
 			}
 		}
 	}
 }
 
-void updateMenuFlames(color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)],
+void updateMenuFlames(const color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)],
 					  signed short colorSources[MENU_FLAME_COLOR_SOURCE_COUNT][4],
 					  signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3]) {
 	
@@ -175,12 +175,13 @@ void antiAlias(unsigned char mask[COLS][ROWS]) {
 #define MENU_TITLE_HEIGHT	19
 
 void initializeMenuFlames(boolean includeTitle,
-						  color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)],
+						  const color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)],
+                          color colorStorage[COLS],
 						  signed short colorSources[MENU_FLAME_COLOR_SOURCE_COUNT][4],
 						  signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3],
 						  unsigned char mask[COLS][ROWS]) {
 	short i, j, k, colorSourceCount;
-	const char title[MENU_TITLE_HEIGHT][MENU_TITLE_WIDTH] = {
+	const char title[MENU_TITLE_HEIGHT][MENU_TITLE_WIDTH+1] = {
 		"########   ########       ######         #######   ####     ###  #########",
 		" ##   ###   ##   ###    ##     ###     ##      ##   ##       #    ##     #",
 		" ##    ##   ##    ##   ##       ###   ##        #   ##       #    ##     #",
@@ -201,8 +202,6 @@ void initializeMenuFlames(boolean includeTitle,
 		"                            ##                                            ",
 		"                           ####                                           ",
 	};
-	
-	rogue.gameHasEnded = false;
 	
 	for (i=0; i<COLS; i++) {
 		for (j=0; j<ROWS; j++) {
@@ -229,7 +228,10 @@ void initializeMenuFlames(boolean includeTitle,
 	// Put some flame source along the bottom row.
 	colorSourceCount = 0;
 	for (i=0; i<COLS; i++) {
-		colors[i][(ROWS + MENU_FLAME_ROW_PADDING)-1] = &flameSourceColor;
+        colorStorage[colorSourceCount] = flameSourceColor;
+        applyColorAverage(&(colorStorage[colorSourceCount]), &flameSourceColorSecondary, 100 - (smoothHiliteGradient(i, COLS - 1) + 25));
+        
+		colors[i][(ROWS + MENU_FLAME_ROW_PADDING)-1] = &(colorStorage[colorSourceCount]);
 		colorSourceCount++;
 	}
 	
@@ -249,9 +251,7 @@ void initializeMenuFlames(boolean includeTitle,
 		antiAlias(mask);
 	}
 	
-#ifdef BROGUE_ASSERTS
-	assert(colorSourceCount <= MENU_FLAME_COLOR_SOURCE_COUNT);
-#endif
+    brogueAssert(colorSourceCount <= MENU_FLAME_COLOR_SOURCE_COUNT);
 	
 	// Simulate the background flames for a while
 	for (i=0; i<100; i++) {
@@ -263,7 +263,8 @@ void initializeMenuFlames(boolean includeTitle,
 void titleMenu() {
 	signed short flames[COLS][(ROWS + MENU_FLAME_ROW_PADDING)][3]; // red, green and blue
 	signed short colorSources[MENU_FLAME_COLOR_SOURCE_COUNT][4]; // red, green, blue, and rand, one for each color source (no more than MENU_FLAME_COLOR_SOURCE_COUNT).
-	color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)];
+	const color *colors[COLS][(ROWS + MENU_FLAME_ROW_PADDING)];
+    color colorStorage[COLS];
 	unsigned char mask[COLS][ROWS];
 	boolean controlKeyWasDown = false;
 	
@@ -288,7 +289,7 @@ void titleMenu() {
 	
 	// Initialize the title menu buttons.
 	encodeMessageColor(whiteColorEscape, 0, &white);
-	encodeMessageColor(goldColorEscape, 0, &itemMessageColor);
+    encodeMessageColor(goldColorEscape, 0, KEYBOARD_LABELS ? &itemMessageColor : &white);
 	sprintf(newGameText, "      %sN%sew Game      ", goldColorEscape, whiteColorEscape);
 	sprintf(customNewGameText, " %sN%sew Game (custom) ", goldColorEscape, whiteColorEscape);
 	b = 0;
@@ -340,7 +341,7 @@ void titleMenu() {
 	rectangularShading(x, y, 20, b*2-1, &black, INTERFACE_OPACITY, shadowBuf);
 	drawButtonsInState(&state);
 
-	initializeMenuFlames(true, colors, colorSources, flames, mask);
+	initializeMenuFlames(true, colors, colorStorage, colorSources, flames, mask);
     rogue.creaturesWillFlashThisTurn = false; // total unconscionable hack
 	
 	do {
@@ -377,7 +378,13 @@ void titleMenu() {
 	} while (button == -1 && rogue.nextGame == NG_NOTHING);
 	drawMenuFlames(flames, mask);
 	if (button != -1) {
-		rogue.nextGame = buttonCommands[button];
+        if (button == 0 && controlKeyIsDown()) {
+            // Should fix an issue with Linux/Windows ports that require moving the mouse after
+            // pressing control to get the button to change.
+            rogue.nextGame = NG_NEW_GAME_WITH_SEED;
+        } else {
+            rogue.nextGame = buttonCommands[button];
+        }
 	}
 }
 
@@ -451,7 +458,11 @@ boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
 			initializeButton(&(buttons[i]));
 			buttons[i].flags &= ~(B_WIDE_CLICK_AREA | B_GRADIENT);
 			buttons[i].buttonColor = *dialogColor;
-			sprintf(buttons[i].text, "%c) ", 'a' + i);
+            if (KEYBOARD_LABELS) {
+                sprintf(buttons[i].text, "%c) ", 'a' + i);
+            } else {
+                buttons[i].text[0] = '\0';
+            }
 			strncat(buttons[i].text, files[currentPageStart+i].path, MAX_FILENAME_DISPLAY_LENGTH);
 			
 			// Clip off the file suffix from the button text.
@@ -568,6 +579,82 @@ boolean dialogChooseFile(char *path, const char *suffix, const char *prompt) {
 	}
 }
 
+void scumMonster(creature *monst, FILE *logFile) {
+    char buf[500];
+    if (monst->bookkeepingFlags & MB_CAPTIVE) {
+        monsterName(buf, monst, false);
+        upperCase(buf);
+        fprintf(logFile, "\n        %s (captive)", buf);
+        if (monst->machineHome > 0) {
+            fprintf(logFile, " (vault %i)", monst->machineHome);
+        }
+    } else if (monst->creatureState == MONSTER_ALLY) {
+        monsterName(buf, monst, false);
+        upperCase(buf);
+        fprintf(logFile, "\n        %s (allied)", buf);
+        if (monst->machineHome) {
+            fprintf(logFile, " (vault %i)", monst->machineHome);
+        }
+    }
+}
+
+void scum(unsigned long startingSeed, short numberOfSeedsToScan, short scanThroughDepth) {
+    unsigned long theSeed;
+    char path[BROGUE_FILENAME_MAX];
+    item *theItem;
+    creature *monst;
+    char buf[500];
+    FILE *logFile;
+    
+    logFile = fopen("Brogue seed catalog.txt", "w");
+    rogue.nextGame = NG_NOTHING;
+    
+    getAvailableFilePath(path, LAST_GAME_NAME, GAME_SUFFIX);
+    strcat(path, GAME_SUFFIX);
+    
+    fprintf(logFile, "Brogue seed catalog, seeds %li to %li, through depth %i.\n\n\
+To play one of these seeds, press control-N from the title screen \
+and enter the seed number. Knowing which items will appear on \
+the first %i depths will, of course, make the game significantly easier.",
+            startingSeed, startingSeed + numberOfSeedsToScan - 1, scanThroughDepth, scanThroughDepth);
+    
+    for (theSeed = startingSeed; theSeed < startingSeed + numberOfSeedsToScan; theSeed++) {
+        fprintf(logFile, "\n\nSeed %li:", theSeed);
+        printf("\nScanned seed %li.", theSeed);
+        rogue.nextGamePath[0] = '\0';
+        randomNumbersGenerated = 0;
+        
+        rogue.playbackMode = false;
+        rogue.playbackFastForward = false;
+        rogue.playbackBetweenTurns = false;
+        
+        strcpy(currentFilePath, path);
+        initializeRogue(theSeed);
+        rogue.playbackOmniscience = true;
+        for (rogue.depthLevel = 1; rogue.depthLevel <= scanThroughDepth; rogue.depthLevel++) {
+            startLevel(rogue.depthLevel == 1 ? 1 : rogue.depthLevel - 1, 1); // descending into level n
+            fprintf(logFile, "\n    Depth %i:", rogue.depthLevel);
+            for (theItem = floorItems->nextItem; theItem != NULL; theItem = theItem->nextItem) {
+                itemName(theItem, buf, true, true, NULL);
+                upperCase(buf);
+                fprintf(logFile, "\n        %s", buf);
+                if (pmap[theItem->xLoc][theItem->yLoc].machineNumber > 0) {
+                    fprintf(logFile, " (vault %i)", pmap[theItem->xLoc][theItem->yLoc].machineNumber);
+                }
+            }
+            for (monst = monsters->nextCreature; monst != NULL; monst = monst->nextCreature) {
+                scumMonster(monst, logFile);
+            }
+            for (monst = dormantMonsters->nextCreature; monst != NULL; monst = monst->nextCreature) {
+                scumMonster(monst, logFile);
+            }
+        }
+        freeEverything();
+        remove(currentFilePath); // Don't add a spurious LastGame file to the brogue folder.
+    }
+    fclose(logFile);
+}
+
 // This is the basic program loop.
 // When the program launches, or when a game ends, you end up here.
 // If the player has already said what he wants to do next
@@ -594,13 +681,16 @@ void mainBrogueJunction() {
 				displayBuffer[i][j].foreColorComponents[k] = 0;
 				displayBuffer[i][j].backColorComponents[k] = 0;
 			}
-			plotCharWithColor(' ', i, j, black, black);
+			plotCharWithColor(' ', i, j, &black, &black);
 		}
 	}
 	
 	initializeLaunchArguments(&rogue.nextGame, rogue.nextGamePath, &rogue.nextGameSeed);
 	
 	do {
+        rogue.gameHasEnded = false;
+        rogue.playbackFastForward = false;
+        rogue.playbackMode = false;
 		switch (rogue.nextGame) {
 			case NG_NOTHING:
 				// Run the main menu to get a decision out of the player.
@@ -708,11 +798,16 @@ void mainBrogueJunction() {
 					initializeRogue(0); // Seed argument is ignored because we're in playback.
 					if (!rogue.gameHasEnded) {
 						startLevel(rogue.depthLevel, 1);
-						pausePlayback();
+                        rogue.playbackPaused = true;
 						displayAnnotation(); // in case there's an annotation for turn 0
 					}
 					
 					while(!rogue.gameHasEnded && rogue.playbackMode) {
+                        if (rogue.playbackPaused) {
+                            rogue.playbackPaused = false;
+                            pausePlayback();
+                        }
+                        
 						rogue.RNG = RNG_COSMETIC; // dancing terrain colors can't influence recordings
 						rogue.playbackBetweenTurns = true;
 						nextBrogueEvent(&theEvent, false, true, false);
@@ -733,6 +828,10 @@ void mainBrogueJunction() {
 				rogue.nextGame = NG_NOTHING;
 				printHighScores(false);
 				break;
+            case NG_SCUM:
+                rogue.nextGame = NG_NOTHING;
+                scum(1, 1000, 5);
+                break;
 			case NG_QUIT:
 				// No need to do anything.
 				break;

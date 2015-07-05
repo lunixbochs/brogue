@@ -7,18 +7,18 @@
  *  
  *  This file is part of Brogue.
  *
- *  Brogue is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
  *
- *  Brogue is distributed in the hope that it will be useful,
+ *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ *  GNU Affero General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with Brogue.  If not, see <http://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 extern tcell tmap[DCOLS][DROWS];						// grids with info about the map
@@ -26,30 +26,23 @@ extern pcell pmap[DCOLS][DROWS];						// grids with info about the map
 extern short **scentMap;
 extern cellDisplayBuffer displayBuffer[COLS][ROWS];
 extern short terrainRandomValues[DCOLS][DROWS][8];
-extern char buffer[DCOLS][DROWS];						// used in cave generation
 extern short **safetyMap;										// used to help monsters flee
 extern short **allySafetyMap;
 extern short **chokeMap;
-extern short **playerPathingMap;
 
-extern short listOfWallsX[4][DROWS*DCOLS];
-extern short listOfWallsY[4][DROWS*DCOLS];
-extern short numberOfWalls[4];
-extern short nbDirs[8][2];
-extern short numberOfRooms;
-extern levelData levels[101];
+extern const short nbDirs[8][2];
+extern const short cDirs[8][2];
+extern levelData *levels;
 extern creature player;
 extern playerCharacter rogue;
 extern creature *monsters;
 extern creature *dormantMonsters;
 extern creature *graveyard;
+extern creature *purgatory;
 extern item *floorItems;
 extern item *packItems;
 extern item *monsterItemsHopper;
-extern room *rooms;
-extern waypoint waypoints[MAX_WAYPOINTS];
 extern short numberOfWaypoints;
-extern levelProfile *thisLevelProfile;
 
 extern char displayedMessage[MESSAGE_LINES][COLS];
 extern boolean messageConfirmed[3];
@@ -66,7 +59,7 @@ extern char displayDetail[DCOLS][DROWS];
 extern FILE *RNGLogFile;
 #endif
 
-extern unsigned char inputRecordBuffer[INPUT_RECORD_BUFFER + 10];
+extern unsigned char inputRecordBuffer[INPUT_RECORD_BUFFER + 100];
 extern unsigned short locationInRecordingBuffer;
 
 extern unsigned long positionInPlaybackFile;
@@ -133,6 +126,7 @@ extern color torchLightColor;
 extern color deepWaterLightColor;
 extern color redFlashColor;
 
+extern color discordColor;
 extern color memoryColor;
 extern color memoryOverlay;
 extern color magicMapColor;
@@ -157,6 +151,10 @@ extern color playerInvisibleColor;
 extern color playerInShadowColor;
 extern color playerInLightColor;
 extern color playerInDarknessColor;
+
+extern const color inLightMultiplierColor;
+extern const color inDarknessMultiplierColor;
+
 extern const color buttonHoverColor;
 extern color titleButtonColor;
 
@@ -174,8 +172,11 @@ extern color backgroundMessageColor;
 
 extern color flavorTextColor;
 
-extern color flameSourceColor;
-extern color flameTitleColor;
+extern const color flameSourceColor;
+extern const color flameSourceColorSecondary;
+extern const color flameTitleColor;
+
+extern const color superVictoryColor;
 
 extern color *dynamicColors[NUMBER_DYNAMIC_COLORS][3];
 
@@ -184,6 +185,7 @@ extern const autoGenerator autoGeneratorCatalog[NUMBER_AUTOGENERATORS];
 extern floorTileType tileCatalog[NUMBER_TILETYPES];
 
 extern dungeonFeature dungeonFeatureCatalog[NUMBER_DUNGEON_FEATURES];
+extern dungeonProfile dungeonProfileCatalog[NUMBER_DUNGEON_PROFILES];
 
 extern lightSource lightCatalog[NUMBER_LIGHT_KINDS];
 
@@ -192,9 +194,10 @@ extern const blueprint blueprintCatalog[NUMBER_BLUEPRINTS];
 extern creatureType monsterCatalog[NUMBER_MONSTER_KINDS];
 extern monsterWords monsterText[NUMBER_MONSTER_KINDS];
 extern hordeType hordeCatalog[NUMBER_HORDES];
-extern levelProfile levelProfileCatalog[NUMBER_LEVEL_PROFILES];
+extern const mutation mutationCatalog[NUMBER_MUTATORS];
+extern const monsterClass monsterClassCatalog[MONSTER_CLASS_COUNT];
 
-extern color *boltColors[NUMBER_BOLT_KINDS];
+extern const feat featTable[FEAT_COUNT];
 
 // ITEMS
 extern char itemTitles[NUMBER_SCROLL_KINDS][30];
@@ -219,10 +222,13 @@ extern itemTable wandTable[NUMBER_WAND_KINDS];
 extern itemTable staffTable[NUMBER_STAFF_KINDS];
 extern itemTable ringTable[NUMBER_RING_KINDS];
 extern itemTable charmTable[NUMBER_CHARM_KINDS];
+
+extern const bolt boltCatalog[NUMBER_BOLT_KINDS];
+
 extern const char weaponRunicNames[NUMBER_WEAPON_RUNIC_KINDS][30];
 
 extern const char armorRunicNames[NUMBER_ARMOR_ENCHANT_KINDS][30];
 
-extern char monsterBehaviorFlagDescriptions[32][COLS];
-extern char monsterAbilityFlagDescriptions[32][COLS];
-extern char monsterBookkeepingFlagDescriptions[32][COLS];
+extern const char monsterBehaviorFlagDescriptions[32][COLS];
+extern const char monsterAbilityFlagDescriptions[32][COLS];
+extern const char monsterBookkeepingFlagDescriptions[32][COLS];

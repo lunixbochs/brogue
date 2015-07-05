@@ -6,6 +6,10 @@
 #include "libtcod.h"
 #include "platform.h"
 
+#if TCOD_TECHVERSION >= 0x01050103
+#define USE_NEW_TCOD_API
+#endif
+
 extern playerCharacter rogue;
 extern TCOD_renderer_t renderer;
 extern short brogueFontSize;
@@ -21,40 +25,52 @@ static struct mouseState missedMouse = {-1, -1, 0, 0};
 
 static int desktop_width, desktop_height;
 
-static void gameLoop()
+static void loadFont(int detectSize)
 {
 	char font[60];
 	
-	int fontWidths[13] = {112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304}; // widths of the font graphics (divide by 16 to get individual character width)
-	int fontHeights[13] = {176, 208, 240, 272, 304, 336, 368, 400, 432, 464, 496, 528, 528}; // heights of the font graphics (divide by 16 to get individual character height)
+	if (detectSize) {
+		int fontWidths[13] = {112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304}; // widths of the font graphics (divide by 16 to get individual character width)
+		int fontHeights[13] = {176, 208, 240, 272, 304, 336, 368, 400, 432, 464, 496, 528, 528}; // heights of the font graphics (divide by 16 to get individual character height)
 
+		const SDL_VideoInfo* vInfo = SDL_GetVideoInfo();
+		int screenWidth = desktop_width = vInfo->current_w;
+		int screenHeight = desktop_height = vInfo->current_h;
+
+		// adjust for title bars and whatever -- very approximate, but better than the alternative
+		screenWidth -= 6;
+		screenHeight -= 48;
+
+		if (brogueFontSize < 1 || brogueFontSize > 13) {
+			for (
+				brogueFontSize = 13;
+				brogueFontSize > 1 && (fontWidths[brogueFontSize - 1] * COLS / 16 >= screenWidth || fontHeights[brogueFontSize - 1] * ROWS / 16 >= screenHeight);
+				brogueFontSize--
+			);
+		}
+
+	}
+
+	sprintf(font, "fonts/font-%i.png", brogueFontSize);
+	
+	TCOD_console_set_custom_font(font, (TCOD_FONT_TYPE_GREYSCALE | TCOD_FONT_LAYOUT_ASCII_INROW), 0, 0);
+	TCOD_console_init_root(COLS, ROWS, "Brogue", false, renderer);
+
+	TCOD_console_map_ascii_codes_to_font(0, 255, 0, 0);
+	TCOD_console_set_keyboard_repeat(175, 30);
+	TCOD_mouse_show_cursor(1);
+
+	SDL_WM_SetIcon(SDL_LoadBMP("icon.bmp"), NULL);
+}
+
+static void gameLoop()
+{
 	if (SDL_Init(SDL_INIT_VIDEO)) {
 		printf ("Could not start SDL.\n");
 		return;
 	}
 
-	const SDL_VideoInfo* vInfo = SDL_GetVideoInfo();
-	int screenWidth = desktop_width = vInfo->current_w;
-	int screenHeight = desktop_height = vInfo->current_h;
-
-	// adjust for title bars and whatever -- very approximate, but better than the alternative
-	screenWidth -= 6;
-	screenHeight -= 48;
-
-	if (brogueFontSize < 1 || brogueFontSize > 13) {
-		for (brogueFontSize = 13; brogueFontSize > 1 && (fontWidths[brogueFontSize - 1] * COLS / 16 >= screenWidth || fontHeights[brogueFontSize - 1] * ROWS / 16 >= screenHeight); brogueFontSize--);
-	}
-
-	sprintf(font, "fonts/font-%i.png", brogueFontSize);
-	
-	SDL_WM_SetIcon(SDL_LoadBMP("icon.bmp"), NULL);
-
-	TCOD_console_set_custom_font(font, (TCOD_FONT_TYPE_GREYSCALE | TCOD_FONT_LAYOUT_ASCII_INROW), 0, 0);
-	TCOD_console_init_root(COLS, ROWS, "Brogue", false, renderer);
-	TCOD_console_map_ascii_codes_to_font(0, 255, 0, 0);
-	TCOD_console_set_keyboard_repeat(175, 30);
-	TCOD_mouse_show_cursor(1);
-	
+	loadFont(true);
 	rogueMain();
 
 	TCOD_console_delete(NULL);
@@ -115,18 +131,7 @@ static void tcod_plotChar(uchar inputChar,
 
 static void initWithFont(int fontSize)
 {
-	char font[80];
-	
-	sprintf(font, "fonts/font-%i.png", fontSize);
-
-	TCOD_console_set_custom_font(font, (TCOD_FONT_TYPE_GREYSCALE | TCOD_FONT_LAYOUT_ASCII_INROW), 0, 0);
-	TCOD_console_init_root(COLS, ROWS, "Brogue", 0, renderer);
-
-	TCOD_console_map_ascii_codes_to_font(0, 255, 0, 0);
-	TCOD_console_set_keyboard_repeat(175, 30);
-
-	SDL_WM_SetIcon(SDL_LoadBMP("icon.bmp"), NULL);
-
+	loadFont(false);
 	refreshScreen();
 }
 
@@ -194,6 +199,13 @@ struct mapsymbol {
 static struct mapsymbol *keymap = NULL;
 
 static void rewriteKey(TCOD_key_t *key, boolean text) {
+	if (key->vk == TCODK_CHAR && (SDL_GetModState() & KMOD_CAPS)) {
+		// cancel out caps lock
+		if (!key->shift) {
+			key->c = tolower(key->c);
+		}
+	}
+
 	struct mapsymbol *s = keymap;
 	while (s != NULL) {
 		if (key->vk == s->in_vk) {
@@ -315,11 +327,17 @@ static boolean tcod_pauseForMilliseconds(short milliseconds)
 	TCOD_console_flush();
 	TCOD_sys_sleep_milli((unsigned int) milliseconds);
 
+	#ifdef USE_NEW_TCOD_API
 	if (bufferedKey.vk == TCODK_NONE) {
 		TCOD_sys_check_for_event(TCOD_EVENT_KEY_PRESS | TCOD_EVENT_MOUSE, &bufferedKey, &mouse);
 	} else {
-		TCOD_sys_check_for_event(TCOD_EVENT_MOUSE, &bufferedKey, &mouse);
+		TCOD_sys_check_for_event(TCOD_EVENT_MOUSE, 0, &mouse);
 	}
+	#else
+	if (bufferedKey.vk == TCODK_NONE) {
+		bufferedKey = TCOD_console_check_for_keypress(TCOD_KEY_PRESSED);
+	}
+	#endif
 	
 	if (missedMouse.lmb == 0 && missedMouse.rmb == 0) {
 		mouse = TCOD_mouse_get_status();
@@ -346,6 +364,8 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 	short x, y;
 	
 	TCOD_console_flush();
+
+	key.vk = TCODK_NONE;
 
 	if (noMenu && rogue.nextGame == NG_NOTHING) rogue.nextGame = NG_NEW_GAME;
 	
@@ -414,19 +434,20 @@ static void tcod_nextKeyOrMouseEvent(rogueEvent *returnEvent, boolean textInput,
 			TCOD_console_flush();
 		}
 
-		
+		#ifdef USE_NEW_TCOD_API
 		TCOD_sys_check_for_event(TCOD_EVENT_KEY_PRESS | TCOD_EVENT_MOUSE, &key, &mouse);
+		#else
+		key = TCOD_console_check_for_keypress(TCOD_KEY_PRESSED);
+		#endif
 
 		rewriteKey(&key, textInput);
 		if (processKeystroke(key, returnEvent, textInput)) {
 			return;
 		}
-		
-		mouse = TCOD_mouse_get_status();
-		// x = mouse.cx;
-		// y = mouse.cy;
 
-		if (serverMode || (SDL_GetAppState() & SDL_APPMOUSEFOCUS)) {
+		mouse = TCOD_mouse_get_status();
+
+		if (serverMode || (SDL_GetAppState() & SDL_APPACTIVE)) {
 			x = mouse.cx;
 			y = mouse.cy;
 		} else {
@@ -566,7 +587,6 @@ char *tcodkeys[] = {
 	"CHAR",
 	NULL
 };
-
 
 static void tcod_remap(const char *input_name, const char *output_name) {
 	// find input and output in the list of tcod keys, if it's there
