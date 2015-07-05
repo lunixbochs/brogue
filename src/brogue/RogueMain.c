@@ -129,7 +129,7 @@ void welcome() {
     encodeMessageColor(buf, strlen(buf), &itemMessageColor);
     strcat(buf, "Amulet of Yendor");
     encodeMessageColor(buf, strlen(buf), &white);
-    sprintf(buf2, " from the %ith floor and escape with it!", AMULET_LEVEL);
+    sprintf(buf2, " from the %ith floor and escape!", AMULET_LEVEL);
     strcat(buf, buf2);
 	message(buf, false);
     if (KEYBOARD_LABELS) {
